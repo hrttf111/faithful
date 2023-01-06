@@ -1,0 +1,19 @@
+[package]
+name = "faithful"
+version = "0.1.0"
+edition = "2021"
+default-run = "faithful"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+glutin = "0.28"
+takeable-option = "0.4"
+gl46 = "0.2.1"
+cgmath = "0.18.0"
+image = "0.24.3"
+num-traits = "0.2.15"
+clap = "4.0.14"
+
+[build-dependencies]
+gl_generator = "0.14"
