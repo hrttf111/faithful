@@ -71,8 +71,7 @@ pub fn get_height(pos: &LandPos) -> u16 {
     }
 }
 
-pub struct LandInc
-{
+pub struct LandInc {
     start: f32,
     inc_vert: f32, // increments for start
     inc_start: f32,
@@ -103,6 +102,36 @@ impl LandInc
     pub fn inc_line(&self, i: usize, j: usize) -> f32 {
         let (start, inc_line) = self.inc(i);
         start + inc_line * (j as f32)
+    }
+}
+
+pub trait LandTile {
+    fn tile_width(&self) -> usize;
+    fn set_texel(&mut self, i: usize, j: usize, val: u8);
+}
+
+pub struct LandTileSlice<'a> {
+    texture: &'a mut[u8],
+    start: usize,
+    line_width: usize,
+    tile_width: usize,
+}
+
+impl<'a> LandTileSlice<'a> {
+    pub fn new(texture: &'a mut[u8], start: usize, line_width: usize, tile_width: usize) -> Self {
+        Self{texture, start, line_width, tile_width}
+    }
+
+}
+
+impl<'a> LandTile for LandTileSlice<'a> {
+    fn tile_width(&self) -> usize {
+        self.tile_width
+    }
+
+    fn set_texel(&mut self, i: usize, j: usize, val: u8) {
+        let index: usize = self.start + self.line_width * i;
+        self.texture[index + j] = val;
     }
 }
 

@@ -1,39 +1,46 @@
+use std::path::{Path, PathBuf};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 
 /******************************************************************************/
 
 pub struct LevelPaths {
-    pub palette: String,
-    pub disp0: String,
-    pub bigf0: String,
-    pub cliff0: String,
-    pub fade0: String,
+    pub palette: PathBuf,
+    pub disp0: PathBuf,
+    pub bigf0: PathBuf,
+    pub cliff0: PathBuf,
+    pub fade0: PathBuf,
+}
+
+fn mk_based_path(base: &Path, s: String) -> PathBuf {
+    let mut base = base.to_path_buf();
+    base.push(s);
+    base
 }
 
 impl LevelPaths {
-    pub fn from_base(base: &str, key: &str) -> Self {
+    pub fn from_base(base: &Path, key: &str) -> Self {
         Self {
-            palette: format!("{base}/pal0-{key}.dat"),
-            disp0: format!("{base}/disp0-{key}.dat"),
-            bigf0: format!("{base}/bigf0-{key}.dat"),
-            cliff0: format!("{base}/cliff0-{key}.dat"),
-            fade0: format!("{base}/fade0-{key}.dat"),
+            palette: mk_based_path(base, format!("pal0-{key}.dat")),
+            disp0: mk_based_path(base, format!("disp0-{key}.dat")),
+            bigf0: mk_based_path(base, format!("bigf0-{key}.dat")),
+            cliff0: mk_based_path(base, format!("cliff0-{key}.dat")),
+            fade0: mk_based_path(base, format!("fade0-{key}.dat")),
         }
     }
 
-    pub fn dat_path(base: &str, num: u8) -> String {
-        format!("{base}/levl2{num:03}.dat")
+    pub fn dat_path(base: &Path, num: u8) -> PathBuf {
+        mk_based_path(base, format!("levl2{num:03}.dat"))
     }
 
-    pub fn hdr_path(base: &str, num: u8) -> String {
-        format!("{base}/levl2{num:03}.hdr")
+    pub fn hdr_path(base: &Path, num: u8) -> PathBuf {
+        mk_based_path(base, format!("levl2{num:03}.hdr"))
     }
 }
 
 /******************************************************************************/
 
-pub fn read_landscape_type(hdr_path: &str) -> String {
+pub fn read_landscape_type(hdr_path: &Path) -> String {
     let hdr_data = read_bin(hdr_path);
     if hdr_data.len() < 70 {
         panic!("Hdr is too small {}", hdr_data.len())
@@ -54,7 +61,7 @@ pub fn read_landscape_type(hdr_path: &str) -> String {
 
 /******************************************************************************/
 
-pub fn read_bin(path: &str) -> Vec<u8> {
+pub fn read_bin(path: &Path) -> Vec<u8> {
     let mut f = OpenOptions::new().read(true).open(path).unwrap();
     let mut vec = Vec::new();
     f.read_to_end(&mut vec).unwrap();
@@ -62,7 +69,7 @@ pub fn read_bin(path: &str) -> Vec<u8> {
 }
 
 #[allow(dead_code)]
-fn read_bin16(path: &str) -> Vec<u16> {
+fn read_bin16(path: &Path) -> Vec<u16> {
     let buf = read_bin(path);
     let mut vec = vec![0; buf.len() / 2];
     for (i, n) in (0..).zip(buf.chunks(2).take(vec.len())) {
@@ -73,7 +80,7 @@ fn read_bin16(path: &str) -> Vec<u16> {
     vec
 }
 
-fn read_bin_i8(path: &str) -> Vec<i8> {
+fn read_bin_i8(path: &Path) -> Vec<i8> {
     let buf = read_bin(path);
     let mut v = std::mem::ManuallyDrop::new(buf);
     let p = v.as_mut_ptr();
@@ -82,7 +89,7 @@ fn read_bin_i8(path: &str) -> Vec<i8> {
     unsafe { Vec::from_raw_parts(p as *mut i8, len, cap) }
 }
 
-fn read_disp(path: &str) -> Vec<i8> {
+fn read_disp(path: &Path) -> Vec<i8> {
     let mut disp = read_bin_i8(path);
     let width = 256;
     for i in 0..width {
@@ -160,7 +167,7 @@ impl<const N: usize> Landscape<N> {
         }
     }
 
-    pub fn from_file(path: &str) -> Self {
+    pub fn from_file(path: &Path) -> Self {
         let mut file = File::options().read(true).open(path).unwrap();
         let mut s = Self::new();
         let mut buf = Vec::new();

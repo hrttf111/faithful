@@ -108,6 +108,10 @@ impl<const N: usize> LandscapeMesh<N> {
         }
     }
 
+    pub fn width(&self) -> usize {
+        N
+    }
+
     pub fn new(step: f32, height_scale: f32) -> Self {
         let vertices = Self::gen_mesh();
         Self{vertices, step, height_scale, shift_x: 0, shift_y: 0, heights: [[0u16; N]; N]}
@@ -184,69 +188,3 @@ impl<'a, const N: usize> Iterator for LandscapeTriangleIterator<'a, N> {
         }
     }
 }
-
-/*
-struct LandscapeProp {
-    pub offset_x: usize,
-    pub offset_y: usize,
-    pub flip_x: bool,
-    pub flip_y: bool,
-}
-
-impl LandscapeProp {
-    pub fn index_x<const N: usize>(&self, index: usize) -> usize {
-        let x = (index + self.offset_x) % N;
-        if self.flip_x {
-            return (N-1) - x;
-        } else {
-            return x;
-        }
-    }
-
-    pub fn index_y<const N: usize>(&self, index: usize) -> usize {
-        let y = (index + self.offset_y) % N;
-        if self.flip_y {
-            return (N-1) - y;
-        } else {
-            return y;
-        }
-    }
-}
-
-pub fn landscape_to_mesh<const N: usize, M: GModel<f32, u16>>(land: &Landscape<N>, m: &mut M, step: f32, h_scale: f32, prop: &LandscapeProp) {
-    let mut lines = [[0u16; N]; 2];
-    let &mut mut line_prev = &mut lines[1];
-    let &mut mut line_curr = &mut lines[0];
-    for i in 0..N {
-        let ip = prop.index_x::<N>(i);
-        let jp = prop.index_y::<N>(0);
-        let ix = i as f32;
-        let iy = 0.0;
-        line_curr[i] = m.push_vertex_v(ix * step, iy * step, land.height[jp][ip] as f32 * h_scale);
-    }
-    line_prev = line_curr;
-
-    for j in 1..N {
-        for i in 0..N-1 {
-            let ip = prop.index_x::<N>(i);
-            let jp = prop.index_y::<N>(j);
-            let ix = i as f32;
-            let iy = j as f32;
-            line_curr[i] = m.push_vertex_v(ix * step, iy * step, land.height[jp][ip] as f32 * h_scale);
-            m.push_triangle_i(line_prev[i], line_curr[i], line_prev[i+1]);
-            if i > 0 {
-                m.push_triangle_i(line_prev[i], line_curr[i], line_curr[i-1]);
-            }
-        }
-        let ip = prop.index_x::<N>(N-1);
-        let jp = prop.index_y::<N>(j);
-        let ix = (N-1) as f32;
-        let iy = j as f32;
-        line_curr[N-1] = m.push_vertex_v(ix * step, iy * step, land.height[jp][ip] as f32 * h_scale);
-        m.push_triangle_i(line_prev[N-1], line_curr[N-1], line_curr[N-2]);
-        let buf = line_prev;
-        line_prev = line_curr;
-        line_curr = buf;
-    }
-}
-*/

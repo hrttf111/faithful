@@ -1,8 +1,10 @@
 use crate::pop::level::GlobeTextureParams;
-use crate::pop::landscape::common::{LandPos, LandPosQuad, LandInc, get_height};
+use crate::pop::landscape::common::{LandPos, LandPosQuad, LandInc, get_height, LandTile, LandTileSlice};
 
-fn set_texture(params: &GlobeTextureParams, pos: &LandPosQuad, texture: &mut[u8], start: usize, line_width: usize) {
-    let n = 8;
+fn make_tile<T: LandTile>(params: &GlobeTextureParams
+                          , pos: &LandPosQuad
+                          , tile: &mut T) {
+    let n = tile.tile_width();
 
     let height_1 = get_height(pos.p1) as f32;
     let height_2 = get_height(pos.p2) as f32;
@@ -22,8 +24,6 @@ fn set_texture(params: &GlobeTextureParams, pos: &LandPosQuad, texture: &mut[u8]
     }
 
     for i in 0..n {
-        let index: usize = start + line_width * (i as usize);
-
         for j in 0..n {
             let hp = height_inc.inc_line(i, j);
             let height_param: i32 = hp as i32;
@@ -48,7 +48,8 @@ fn set_texture(params: &GlobeTextureParams, pos: &LandPosQuad, texture: &mut[u8]
                 panic!("{height_component:} | {static_component:?} | {disp_val:?} | {c4_disp_param:?} | {big_index:?}");
             }
             let big_component: usize = (params.bigf0[big_index]).into();
-            texture[index + (j as usize)] = params.cliff0[big_component + c1_param * 0x80];
+            let texel = params.cliff0[big_component + c1_param * 0x80];
+            tile.set_texel(i, j, texel);
         }
     }
 }
@@ -67,7 +68,8 @@ pub fn texture_globe(width: usize
             let start = i * width * 64 + j * 8;
             let pos = LandPosQuad {x: (j & 0x7) as u16, y: (i & 0x7) as u16
                 , p1: &land[index_1], p2: &land[index_2], p3: &land[index_3], p4: &land[index_4]};
-            set_texture(params, &pos, &mut texture, start, 8 * width);
+            let mut tile = LandTileSlice::new(&mut texture, start, 8 * width, 8);
+            make_tile(params, &pos, &mut tile);
         }
     }
 

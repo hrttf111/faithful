@@ -1,8 +1,8 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
 
-layout (location=8, binding=0) uniform usampler2D tex;
-layout (location=9, binding=1) uniform usampler1D palette;
+layout (location=10, binding=0) uniform usampler2D tex;
+layout (location=11, binding=1) uniform usampler1D palette;
 
 layout (location=2) uniform vec4 levelShift;
 layout (location=4) uniform vec4 selectedColor;

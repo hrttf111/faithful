@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
 use clap::{arg, Arg, ArgAction, Command};
 
-use faithful::pop::level::{GlobeTextureParams, Landscape, LevelPaths, read_landscape_type};
+use faithful::pop::level::GlobeTextureParams;
+use faithful::pop::landscape::LevelRes;
 use faithful::pop::landscape::common::LandPos;
 use faithful::pop::landscape::minimap::texture_minimap;
 use faithful::pop::landscape::globe::texture_globe;
@@ -71,13 +72,6 @@ fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: 
         }
     }
     img
-}
-
-fn read_level(base: &str, num: u8) -> (String, String) {
-    let dat_path = LevelPaths::dat_path(base, num);
-    let hdr_path = LevelPaths::hdr_path(base, num);
-    let s = read_landscape_type(&hdr_path);
-    (dat_path, s)
 }
 
 /*
@@ -174,31 +168,6 @@ enum TextureType {
     Minimap,
 }
 
-struct LevelRes {
-    params: GlobeTextureParams,
-    landscape: Landscape<128>,
-}
-
-impl LevelRes {
-    fn new(base: &Path, level_num: u8, level_type_opt: Option<&String>) -> LevelRes {
-        let data_dir = base.join("data").as_path().to_str().unwrap().to_owned();
-        let level_dir = base.join("levels").as_path().to_str().unwrap().to_owned();
-        let (level_path, level_type) = read_level(&level_dir, level_num);
-
-        let paths = match level_type_opt {
-            Some(v) => LevelPaths::from_base(&data_dir, v),
-            None => LevelPaths::from_base(&data_dir, &level_type),
-        };
-
-        let landscape = Landscape::from_file(&level_path);
-        let params = GlobeTextureParams::from_level(&paths);
-        LevelRes {
-            params,
-            landscape,
-        }
-    }
-}
-
 fn write_img_stdout<P, C>(img: &ImageBuffer<P, C>, format: ImageOutputFormat)
     where P: image::Pixel + image::PixelWithColorType,
           C: std::ops::Deref<Target = [P::Subpixel]>,
@@ -214,7 +183,7 @@ fn make_texture_land(tex_type: TextureType
                      , level_type_opt: Option<&String>
                      , tex_move: Option<(u32, u32)>
                      ) {
-    let level_res = LevelRes::new(base, level_num, level_type_opt);
+    let level_res = LevelRes::new(base, level_num, level_type_opt.map(|s| s.as_str()));
 
     let land_size = level_res.landscape.land_size();
     let params_globe = &level_res.params;

@@ -44,11 +44,7 @@ impl GlBuffer {
         let gl = &self.gl;
         unsafe {
             let ptr = data.as_ptr() as *const c_void;
-            //gl.NamedBufferStorage(self.handle, size as isize, ptr, gl46::GLbitfield(0));
-            //gl.BufferStorage(GL_TEXTURE_BUFFER, size as isize, ptr, gl46::GLbitfield(0));
-            //gl.BufferData(GL_TEXTURE_BUFFER, size as isize, ptr, GL_STATIC_DRAW);
             gl.NamedBufferData(self.handle, size as isize, ptr, GL_STATIC_DRAW);
-            //gl.NamedBufferStorage(self.handle, size as isize, ptr, GL_STATIC_DRAW);
             gl_error_panic(gl, "NamedBufferStorage");
         }
     }

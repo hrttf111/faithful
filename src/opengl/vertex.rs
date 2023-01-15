@@ -75,20 +75,20 @@ impl GlVao {
                 }
                 if attr.offset > 0 {
                     gl.VertexAttribPointer(
-                        attr.index, // attribute
-                        attr.elems as i32,        // number of elements per vertex
-                        attr.elem_type,    // the type of each element
-                        0 /*GL_FALSE*/,    // take our values as-is
-                        0,                 // stride
+                        attr.index,
+                        attr.elems as i32,
+                        attr.elem_type,
+                        0 /*GL_FALSE*/,
+                        0,
                         attr.offset as *const c_void
                     );
                 } else {
                     gl.VertexAttribPointer(
-                        attr.index, // attribute
-                        attr.elems as i32,        // number of elements per vertex
-                        attr.elem_type,    // the type of each element
-                        0 /*GL_FALSE*/,    // take our values as-is
-                        0,                 // stride
+                        attr.index,
+                        attr.elems as i32,
+                        attr.elem_type,
+                        0 /*GL_FALSE*/,
+                        0,
                         null()
                     );
                 }

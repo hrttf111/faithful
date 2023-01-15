@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::fmt;
 
 use std::fs::File;
+use std::path::Path;
 
 use std::io;
 use std::io::{Error, ErrorKind};
@@ -109,7 +110,7 @@ pub struct GlShader {
 }
 
 impl GlShader {
-    pub fn from_file<L: ShaderLoader>(name: &str, path: &str, gl: &GlCtx, loader: &L, shader_type: GLenum) -> io::Result<GlShader> {
+    pub fn from_file<L: ShaderLoader>(name: &str, path: &Path, gl: &GlCtx, loader: &L, shader_type: GLenum) -> io::Result<GlShader> {
         let mut file = File::options().read(true).open(path)?;
         let mut vec = Vec::new();
         file.read_to_end(&mut vec)?;
@@ -127,7 +128,7 @@ impl GlShader {
         Ok(GlShader { name : name.to_string(), shader })
     }
 
-    pub fn attach_from_file<L: ShaderLoader>(name: &str, path: &str, program: &mut GlProgram, loader: &L, shader_type: GLenum) {
+    pub fn attach_from_file<L: ShaderLoader>(name: &str, path: &Path, program: &mut GlProgram, loader: &L, shader_type: GLenum) {
         let gl = &program.gl;
         match GlShader::from_file(name, path, gl, loader, shader_type) {
             Err(e) =>
@@ -266,7 +267,6 @@ impl GlProgram {
 
     pub fn set_uniform_name(&mut self, name: &str, uniform: Rc<RefCell<dyn GlUniform>>) {
         let index = self.get_uniform_location(name).unwrap();
-        println!("Index = {index:?}");
         self.set_uniform(index as i32, uniform)
     }
 

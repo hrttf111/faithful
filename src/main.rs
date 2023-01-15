@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use glutin::event::{Event, WindowEvent, ElementState};
 use glutin::event_loop::{ControlFlow, EventLoop};
@@ -8,6 +8,8 @@ use glutin::window::WindowBuilder;
 use glutin::ContextBuilder;
 use glutin::event::KeyboardInput as KI;
 use glutin::event::VirtualKeyCode as VKC;
+
+use clap::{Arg, ArgAction, Command};
 
 use gl46::*;
 
@@ -20,19 +22,32 @@ use faithful::view::*;
 use faithful::intersect::intersect_iter;
 
 use faithful::landscape::{LandscapeMesh, LandscapeModel};
-use faithful::pop::landscape::land::{make_texture_land, LevelRes, draw_texture};
+use faithful::pop::landscape::{make_texture_land, LevelRes, draw_texture_u8};
 
 use faithful::opengl::gl::{GlCtx, new_gl_ctx};
 use faithful::opengl::program::*;
-use faithful::opengl::uniform::{GlUniform1, GlUniform1Cell};
+use faithful::opengl::uniform::{GlUniform1, GlUniform1Cell, GlShaderStorage};
 use faithful::opengl::texture::*;
 use faithful::envelop::*;
 
 /******************************************************************************/
 
+fn obj_colors() -> Vec<Vector3<u8>> {
+    vec![ Vector3{x: 255, y: 0, z: 0}
+        , Vector3{x: 128, y: 0, z: 128}
+        , Vector3{x: 0, y: 255, z: 0}
+        , Vector3{x: 64, y: 64, z: 128}
+        , Vector3{x: 128, y: 0, z: 128}
+        , Vector3{x: 0, y: 255, z: 255}
+        , Vector3{x: 0, y: 0, z: 255}
+        , Vector3{x: 0, y: 64, z: 0}
+        , Vector3{x: 128, y: 64, z: 0}
+    ]
+}
+
 type LandscapeMeshS = LandscapeMesh<128>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum ActionMode {
     GlobalMoveXY,
     GlobalMoveXZ,
@@ -43,6 +58,7 @@ enum ActionMode {
 
 impl ActionMode {
     fn process_key(&mut self, key: VKC, camera: &mut Camera, cam: &mut Vector3<f32>) -> bool {
+        let prev_self = *self;
         match self {
             Self::GlobalRotateXZ =>
                 match key {
@@ -60,7 +76,6 @@ impl ActionMode {
                     },
                     VKC::P => {
                         *self = Self::GlobalRotateXY;
-                        println!("{:?}", self);
                     },
                     _ => (),
                 },
@@ -80,7 +95,6 @@ impl ActionMode {
                     },
                     VKC::P => {
                         *self = Self::GlobalMoveXY;
-                        println!("{:?}", self);
                     },
                     _ => (),
                 },
@@ -100,7 +114,6 @@ impl ActionMode {
                     },
                     VKC::P => {
                         *self = Self::GlobalMoveXZ;
-                        println!("{:?}", self);
                     },
                     _ => (),
                 },
@@ -120,7 +133,6 @@ impl ActionMode {
                     },
                     VKC::P => {
                         *self = Self::GlobalMoveRot;
-                        println!("{:?}", self);
                     },
                     _ => (),
                 },
@@ -140,11 +152,12 @@ impl ActionMode {
                     },
                     VKC::P => {
                         *self = Self::GlobalRotateXZ;
-                        println!("{:?}", self);
                     },
                     _ => (),
                 },
-            //_ => (),
+        }
+        if *self != prev_self {
+            println!("{:?}", self);
         }
         true
     }
@@ -202,17 +215,18 @@ impl LevelAssets {
 }
 
 struct LevelUniforms {
-    uniform_mvp: GlUniform1Cell<Matrix4::<f32>>,
-    uniform_selected: GlUniform1Cell<i32>,
-    uniform_selected_color: GlUniform1Cell<Vector4::<f32>>,
-    uniform_mvp_model: GlUniform1Cell<Matrix4::<f32>>,
+    mvp: GlUniform1Cell<Matrix4::<f32>>,
+    mvp_model: GlUniform1Cell<Matrix4::<f32>>,
+    land_width: GlUniform1Cell<i32>,
+    land_step: GlUniform1Cell<f32>,
+    selected: GlUniform1Cell<i32>,
+    selected_color: GlUniform1Cell<Vector4::<f32>>,
     level_shift: GlUniform1Cell<Vector4::<f32>>,
     height_scale: GlUniform1Cell<f32>,
-    heights: GlUniform1Cell<Vec<u32>>,
 }
 
 trait LandscapeProgram {
-    fn gl_program(&self, index: usize) -> &GlProgram;
+    fn gl_program(&self) -> &GlProgram;
     fn update(&mut self, level_res: &LevelRes);
 }
 
@@ -266,25 +280,25 @@ impl MainLandscapeProgram {
         let mut program = {
             let mut program = GlProgram::new(gl);
             let loader = GlShaderLoaderBinary {};
-            GlShader::attach_from_file("vert", "shaders/landscape.vert.spv", &mut program, &loader, GL_VERTEX_SHADER);
-            GlShader::attach_from_file("frag", "shaders/landscape.frag.spv", &mut program, &loader, GL_FRAGMENT_SHADER);
+            GlShader::attach_from_file("vert", Path::new("shaders/landscape.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
+            GlShader::attach_from_file("frag", Path::new("shaders/landscape.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
             program
         };
         program.use_program();
         let assets = LevelAssets::new(gl, level_res);
-        program.set_uniform(0, uniforms.uniform_mvp.clone());
-        program.set_uniform(1, uniforms.uniform_mvp_model.clone());
+        program.set_uniform(0, uniforms.mvp.clone());
+        program.set_uniform(1, uniforms.mvp_model.clone());
         program.set_uniform(2, uniforms.level_shift.clone());
         program.set_uniform(3, uniforms.height_scale.clone());
-        program.set_uniform(4, uniforms.uniform_selected_color.clone());
-        program.set_uniform(6, uniforms.uniform_selected.clone());
-        program.set_uniform(7, uniforms.heights.clone());
+        program.set_uniform(4, uniforms.selected_color.clone());
+        program.set_uniform(6, uniforms.selected.clone());
+        program.set_uniform(7, uniforms.land_step.clone());
+        program.set_uniform(8, uniforms.land_width.clone());
 
-        //let program_info = program.get_info().unwrap();
-        //println!("Program info {}", program_info);
-
-        //let program_log = program.get_log().unwrap();
-        //println!("Program log: {}", program_log);
+        let program_info = program.get_info().unwrap();
+        log::debug!("Program info {}", program_info);
+        let program_log = program.get_log().unwrap();
+        log::debug!("Program log: {}", program_log);
 
         MainLandscapeProgram{program, textures: assets}
     }
@@ -295,7 +309,7 @@ impl MainLandscapeProgram {
 }
 
 impl LandscapeProgram for MainLandscapeProgram {
-    fn gl_program(&self, _index: usize) -> &GlProgram {
+    fn gl_program(&self) -> &GlProgram {
         &self.program
     }
 
@@ -315,8 +329,8 @@ impl CpuLandscapeProgram {
         let mut program = {
             let mut program = GlProgram::new(gl);
             let loader = GlShaderLoaderBinary {};
-            GlShader::attach_from_file("vert", "shaders/landscape.vert.spv", &mut program, &loader, GL_VERTEX_SHADER);
-            GlShader::attach_from_file("frag", "shaders/landscape_cpu.frag.spv", &mut program, &loader, GL_FRAGMENT_SHADER);
+            GlShader::attach_from_file("vert", Path::new("shaders/landscape.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
+            GlShader::attach_from_file("frag", Path::new("shaders/landscape_cpu.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
             program
         };
 
@@ -339,13 +353,14 @@ impl CpuLandscapeProgram {
             GlTexture::new_1d(gl, uniform, &params, width, level_res.params.palette.as_slice())
         }.unwrap();
 
-        program.set_uniform(0, uniforms.uniform_mvp.clone());
-        program.set_uniform(1, uniforms.uniform_mvp_model.clone());
+        program.set_uniform(0, uniforms.mvp.clone());
+        program.set_uniform(1, uniforms.mvp_model.clone());
         program.set_uniform(2, uniforms.level_shift.clone());
         program.set_uniform(3, uniforms.height_scale.clone());
-        program.set_uniform(4, uniforms.uniform_selected_color.clone());
-        program.set_uniform(6, uniforms.uniform_selected.clone());
-        program.set_uniform(7, uniforms.heights.clone());
+        program.set_uniform(4, uniforms.selected_color.clone());
+        program.set_uniform(6, uniforms.selected.clone());
+        program.set_uniform(7, uniforms.land_step.clone());
+        program.set_uniform(8, uniforms.land_width.clone());
 
         CpuLandscapeProgram{program, texture, tex_palette}
     }
@@ -357,7 +372,7 @@ impl CpuLandscapeProgram {
 }
 
 impl LandscapeProgram for CpuLandscapeProgram {
-    fn gl_program(&self, _index: usize) -> &GlProgram {
+    fn gl_program(&self) -> &GlProgram {
         &self.program
     }
 
@@ -378,30 +393,31 @@ impl CpuFullLandscapeProgram {
         let mut program = {
             let mut program = GlProgram::new(gl);
             let loader = GlShaderLoaderBinary {};
-            GlShader::attach_from_file("vert", "shaders/landscape.vert.spv", &mut program, &loader, GL_VERTEX_SHADER);
-            GlShader::attach_from_file("frag", "shaders/landscape_full.frag.spv", &mut program, &loader, GL_FRAGMENT_SHADER);
+            GlShader::attach_from_file("vert", Path::new("shaders/landscape.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
+            GlShader::attach_from_file("frag", Path::new("shaders/landscape_full.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
             program
         };
 
         program.use_program();
 
         let texture = {
-            let params = TextureParams{target: GL_TEXTURE_2D, internal_format: GL_RGB32F, format: GL_RGB, data_type: GL_FLOAT, nearest: false};
+            let params = TextureParams{target: GL_TEXTURE_2D, internal_format: GL_RGB32F, format: GL_RGB, data_type: GL_UNSIGNED_BYTE, nearest: false};
             let uniform = Some(6);
             let size = level_res.landscape.land_size() * 32;
             let width = size;
             let height = size;
-            let texture = draw_texture(&level_res.params.palette, width, landscape);
+            let texture = draw_texture_u8(&level_res.params.palette, width, landscape);
             GlTexture::new_2d(gl, uniform, &params, width, height, &texture)
         }.unwrap();
 
-        program.set_uniform(0, uniforms.uniform_mvp.clone());
-        program.set_uniform(1, uniforms.uniform_mvp_model.clone());
+        program.set_uniform(0, uniforms.mvp.clone());
+        program.set_uniform(1, uniforms.mvp_model.clone());
         program.set_uniform(2, uniforms.level_shift.clone());
         program.set_uniform(3, uniforms.height_scale.clone());
-        program.set_uniform(4, uniforms.uniform_selected_color.clone());
-        program.set_uniform(6, uniforms.uniform_selected.clone());
-        program.set_uniform(7, uniforms.heights.clone());
+        program.set_uniform(4, uniforms.selected_color.clone());
+        program.set_uniform(6, uniforms.selected.clone());
+        program.set_uniform(7, uniforms.land_step.clone());
+        program.set_uniform(8, uniforms.land_width.clone());
 
         CpuFullLandscapeProgram{program, texture}
     }
@@ -413,14 +429,14 @@ impl CpuFullLandscapeProgram {
 }
 
 impl LandscapeProgram for CpuFullLandscapeProgram {
-    fn gl_program(&self, _index: usize) -> &GlProgram {
+    fn gl_program(&self) -> &GlProgram {
         &self.program
     }
 
     fn update(&mut self, level_res: &LevelRes) {
         let land_texture = make_texture_land(level_res, None);
         let size = level_res.landscape.land_size() * 32;
-        let texture = draw_texture(&level_res.params.palette, size, &land_texture);
+        let texture = draw_texture_u8(&level_res.params.palette, size, &land_texture);
         self.texture.set_data(&texture);
     }
 }
@@ -434,20 +450,21 @@ impl GradLandscapeProgram {
         let mut program = {
             let mut program = GlProgram::new(gl);
             let loader = GlShaderLoaderBinary {};
-            GlShader::attach_from_file("vert", "shaders/landscape.vert.spv", &mut program, &loader, GL_VERTEX_SHADER);
-            GlShader::attach_from_file("frag", "shaders/landscape_grad.frag.spv", &mut program, &loader, GL_FRAGMENT_SHADER);
+            GlShader::attach_from_file("vert", Path::new("shaders/landscape.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
+            GlShader::attach_from_file("frag", Path::new("shaders/landscape_grad.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
             program
         };
 
         program.use_program();
 
-        program.set_uniform(0, uniforms.uniform_mvp.clone());
-        program.set_uniform(1, uniforms.uniform_mvp_model.clone());
+        program.set_uniform(0, uniforms.mvp.clone());
+        program.set_uniform(1, uniforms.mvp_model.clone());
         program.set_uniform(2, uniforms.level_shift.clone());
         program.set_uniform(3, uniforms.height_scale.clone());
-        program.set_uniform(4, uniforms.uniform_selected_color.clone());
-        program.set_uniform(6, uniforms.uniform_selected.clone());
-        program.set_uniform(7, uniforms.heights.clone());
+        program.set_uniform(4, uniforms.selected_color.clone());
+        program.set_uniform(6, uniforms.selected.clone());
+        program.set_uniform(7, uniforms.land_step.clone());
+        program.set_uniform(8, uniforms.land_width.clone());
 
         GradLandscapeProgram{program}
     }
@@ -458,7 +475,7 @@ impl GradLandscapeProgram {
 }
 
 impl LandscapeProgram for GradLandscapeProgram {
-    fn gl_program(&self, _index: usize) -> &GlProgram {
+    fn gl_program(&self) -> &GlProgram {
         &self.program
     }
 
@@ -470,9 +487,9 @@ fn make_landscape_mode(gl: &GlCtx, uniforms: &LevelUniforms, landscape_mesh: &La
     let mut model_main = {
         let mut model: LandscapeModel = MeshModel::new();
         landscape_mesh.to_model(&mut model);
-        println!("Landscape mesh - vertices={:?}, indices={:?}"
-                 , model.vertex_num(), model.index_num());
-        ModelEnvelop::<LandscapeModel>::new(gl, &uniforms.uniform_mvp_model, vec![(RenderType::Triangles, model)])
+        log::debug!("Landscape mesh - vertices={:?}, indices={:?}"
+                    , model.vertex_num(), model.index_num());
+        ModelEnvelop::<LandscapeModel>::new(gl, &uniforms.mvp_model, vec![(RenderType::Triangles, model)])
     };
     if let Some(m) = model_main.get(0) {
         m.location.x = -2.0;
@@ -482,16 +499,16 @@ fn make_landscape_mode(gl: &GlCtx, uniforms: &LevelUniforms, landscape_mesh: &La
     model_main
 }
 
-fn update_level(base: &Path, level_num: u8, landscape_mesh: &mut LandscapeMeshS, uniforms: &LevelUniforms, program_container: &mut LandscapeProgramContainer) -> RefCell<LevelRes> {
+fn update_level(base: &Path, level_num: u8, landscape_mesh: &mut LandscapeMeshS, program_container: &mut LandscapeProgramContainer, heights_buffer: &mut GlShaderStorage) -> RefCell<LevelRes> {
     let level_res = {
         let level_type = None;
         LevelRes::new(base, level_num, level_type)
     };
     landscape_mesh.set_heights(&level_res.landscape.height);
-    uniforms.heights.borrow_mut().set({
+    heights_buffer.update(0, {
         let landscape = level_res.landscape.make_shores();
-        landscape.to_vec()
-    });
+        &landscape.to_vec()
+    }).unwrap();
     program_container.update_programs(&level_res);
     RefCell::new(level_res)
 }
@@ -509,20 +526,96 @@ fn render(gl: &GlCtx, program_landscape: &GlProgram, program_objects: &GlProgram
     scene.model_select.draw(1);
 }
 
+struct AppConfig {
+    base: Option<PathBuf>,
+    level: Option<u8>,
+    landtype: Option<String>,
+    cpu: bool,
+    cpu_full: bool,
+    debug: bool,
+}
+
+fn cli() -> Command {
+    let args = [
+        Arg::new("base")
+            .long("base")
+            .action(ArgAction::Set)
+            .value_name("BASE_PATH")
+            .value_parser(clap::value_parser!(PathBuf))
+            .help("Path to POP3 directory"),
+        Arg::new("level")
+            .long("level")
+            .action(ArgAction::Set)
+            .value_name("LEVEL")
+            .value_parser(clap::value_parser!(u8).range(1..255))
+            .help("Level number"),
+        Arg::new("landtype")
+            .long("landtype")
+            .action(ArgAction::Set)
+            .value_name("LAND_TYPE")
+            .value_parser(clap::builder::StringValueParser::new())
+            .help("Override land type"),
+        Arg::new("cpu")
+            .long("cpu")
+            .action(ArgAction::SetTrue)
+            .help("Enable CPU texture rendering"),
+        Arg::new("cpu-full")
+            .long("cpu-full")
+            .action(ArgAction::SetTrue)
+            .help("Enable full CPU texture rendering"),
+        Arg::new("debug")
+            .long("debug")
+            .action(ArgAction::SetTrue)
+            .help("Enable debug printing"),
+    ];
+    Command::new("faithful")
+        .about("POP3 opengl renderer")
+        .args(&args)
+}
+
+fn get_config() -> AppConfig {
+    let matches = cli().get_matches();
+
+    let base = matches.get_one("base").cloned();
+    let level = matches.get_one("level").copied();
+    let landtype = matches.get_one("landtype").cloned();
+    let cpu = matches.get_flag("cpu");
+    let cpu_full = matches.get_flag("cpu-full");
+    let debug = matches.get_flag("debug");
+
+    AppConfig{base, level, landtype, cpu, cpu_full, debug}
+}
+
+fn init_logger(app_config: &AppConfig) {
+    let log_level: &str = if app_config.debug {
+        "debug"
+    } else {
+        "info"
+    };
+    let env = env_logger::Env::default()
+        .filter_or("F_LOG_LEVEL", log_level)
+        .write_style_or("F_LOG_STYLE", "always");
+    env_logger::init_from_env(env);
+}
+
 fn main() {
+    let app_config = get_config();
+
+    init_logger(&app_config);
+
     let el = EventLoop::new();
-    let wb = WindowBuilder::new().with_title("Rust OpenGL test");
+    let wb = WindowBuilder::new().with_title("Faithful");
 
     let windowed_context = ContextBuilder::new().build_windowed(wb, &el).unwrap();
     let windowed_context = unsafe { windowed_context.make_current().unwrap() };
 
-    println!("Pixel format of the window's GL context: {:?}", windowed_context.get_pixel_format());
-    let mut level_num = 1;
-    let base = Path::new("/opt/sandbox/pop");
+    log::debug!("Pixel format of the window's GL context: {:?}", windowed_context.get_pixel_format());
+    let mut level_num = app_config.level.unwrap_or(1);
+    let base = app_config.base.unwrap_or_else(|| Path::new("/opt/sandbox/pop").to_path_buf());
 
-    let mut level_res = {
-        let level_type = None;
-        RefCell::new(LevelRes::new(base, level_num, level_type))
+    let level_res = {
+        let level_type = app_config.landtype.as_deref();
+        RefCell::new(LevelRes::new(&base, level_num, level_type))
     };
 
     let mut landscape_mesh: LandscapeMeshS = {
@@ -536,37 +629,54 @@ fn main() {
     let gl = new_gl_ctx(windowed_context.context());
 
     let uniforms = LevelUniforms {
-        uniform_mvp: GlUniform1::new_rc(Matrix4::<f32>::identity()),
-        uniform_selected: GlUniform1::new_rc(0),
-        uniform_selected_color: GlUniform1::new_rc(Vector4::<f32>::new(1.0, 0.0, 0.0, 0.0)),
-        uniform_mvp_model: GlUniform1::new_rc(Matrix4::<f32>::identity()),
+        mvp: GlUniform1::new_rc(Matrix4::<f32>::identity()),
+        mvp_model: GlUniform1::new_rc(Matrix4::<f32>::identity()),
+        land_step: GlUniform1::new_rc(landscape_mesh.step()),
+        land_width: GlUniform1::new_rc(landscape_mesh.width() as i32),
+        selected: GlUniform1::new_rc(0),
+        selected_color: GlUniform1::new_rc(Vector4::<f32>::new(1.0, 0.0, 0.0, 0.0)),
         level_shift: GlUniform1::new_rc(landscape_mesh.get_shift_vector()),
         height_scale: GlUniform1::new_rc(landscape_mesh.height_scale()),
-        heights: {
-            let landscape = level_res.borrow_mut().landscape.make_shores();
-            let vec = landscape.to_vec();
-            GlUniform1::new_rc(vec)
-        },
+    };
+
+    let mut heights_buffer = {
+        let mut heights_buffer = GlShaderStorage::new(&gl, 4 * 128 * 128, 9).unwrap();
+        let landscape = level_res.borrow_mut().landscape.make_shores();
+        let vec = landscape.to_vec();
+        heights_buffer.update(0, &vec).unwrap();
+        heights_buffer
     };
 
     let mut program_objects = {
         let mut program = GlProgram::new(&gl);
         let loader = GlShaderLoaderBinary {};
-        GlShader::attach_from_file("vert", "shaders/objects.vert.spv", &mut program, &loader, GL_VERTEX_SHADER);
-        GlShader::attach_from_file("frag", "shaders/objects.frag.spv", &mut program, &loader, GL_FRAGMENT_SHADER);
+        GlShader::attach_from_file("vert", Path::new("shaders/objects.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
+        GlShader::attach_from_file("frag", Path::new("shaders/objects.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
         program
     };
-
-    let uniform_frag: GlUniform1Cell<i32> = GlUniform1::new_rc(1);
     program_objects.use_program();
-    program_objects.set_uniform(0, uniforms.uniform_mvp.clone());
-    program_objects.set_uniform(1, uniforms.uniform_mvp_model.clone());
-    program_objects.set_uniform(2, uniforms.uniform_selected.clone());
-    program_objects.set_uniform(3, uniform_frag);
+    let _obj_palette = {
+        let params = TextureParams{target: GL_TEXTURE_1D, internal_format: GL_RGB8UI, format: GL_RGB_INTEGER, data_type: GL_UNSIGNED_BYTE, nearest: true};
+        let uniform = Some(0);
+        let color_textures = obj_colors();
+        let width = color_textures.len();
+        GlTexture::new_1d(&gl, uniform, &params, width, color_textures.as_slice())
+    }.unwrap();
+    program_objects.set_uniform(0, uniforms.mvp.clone());
+    program_objects.set_uniform(1, uniforms.mvp_model.clone());
+    program_objects.set_uniform(2, uniforms.selected.clone());
 
     let mut program_container = LandscapeProgramContainer::new();
     program_container.add_program(MainLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
     program_container.add_program(GradLandscapeProgram::new_rc_ref(&gl, &uniforms));
+
+    if app_config.cpu {
+        program_container.add_program(CpuLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
+    }
+
+    if app_config.cpu_full {
+        program_container.add_program(CpuFullLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
+    }
 
     let model_main = make_landscape_mode(&gl, &uniforms, &landscape_mesh);
 
@@ -575,7 +685,7 @@ fn main() {
         model.push_vertex(Vector3::new(0.0, 0.0, 0.0));
         model.push_vertex(Vector3::new(0.0, 0.0, 0.0));
         let m = vec![(RenderType::Lines, model)];
-        ModelEnvelop::<DefaultModel>::new(&gl, &uniforms.uniform_mvp_model, m)
+        ModelEnvelop::<DefaultModel>::new(&gl, &uniforms.mvp_model, m)
     };
 
     let mut scene = Scene {
@@ -589,14 +699,11 @@ fn main() {
     camera.angle_z = 60;
     let mut screen = Screen {width: 800, height: 600};
 
-    println!("OpenGL init done");
-
-    let mut cpu_programs_created = false;
     let mut do_render = true;
     let mut mouse_pos = Point2::<f32>::new(0.0, 0.0);
     let mut mode = ActionMode::GlobalMoveRot;
     el.run(move |event, _, control_flow| {
-        //println!("{:?}", event);
+        log::trace!("{:?}", event);
         *control_flow = ControlFlow::Wait;
 
         match event {
@@ -608,7 +715,6 @@ fn main() {
                 WindowEvent::MouseInput { state, .. } => {
                     if state == ElementState::Pressed {
                         let (v1, v2) = screen_to_scene(&screen, &camera, &mouse_pos);
-                        //println!("\nIntersect({mouse_pos:?}): {v1:?} - {v2:?}");
                         if let Some(m) = scene.model_select.get(0) {
                             m.model.set_vertex(0, v1);
                             m.model.set_vertex(1, v2);
@@ -653,24 +759,17 @@ fn main() {
                         program_container.prev();
                         do_render = true;
                     },
-                    KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::U), .. } => {
-                        if !cpu_programs_created {
-                            program_container.add_program(CpuFullLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
-                            program_container.add_program(CpuLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
-                            cpu_programs_created = true;
-                        }
-                    },
                     KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::B), .. } => {
                         level_num = (level_num + 1) % 26;
                         if level_num == 0 {
                             level_num = 1;
                         }
-                        level_res = update_level(base, level_num, &mut landscape_mesh, &uniforms, &mut program_container);
+                        update_level(&base, level_num, &mut landscape_mesh, &mut program_container, &mut heights_buffer);
                         do_render = true;
                     },
                     KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::V), .. } => {
                         level_num = if level_num == 1 { 25 } else { level_num - 1 };
-                        level_res = update_level(base, level_num, &mut landscape_mesh, &uniforms, &mut program_container);
+                        update_level(&base, level_num, &mut landscape_mesh, &mut program_container, &mut heights_buffer);
                         do_render = true;
                     },
                     KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::L), .. } => {
@@ -719,11 +818,11 @@ fn main() {
                 scene.model_select.update_model(0);
                 let mvp = MVP::new(&screen, &camera);
                 let mvp_m = mvp.projection * mvp.view * mvp.transform;
-                uniforms.uniform_mvp.borrow_mut().set(mvp_m);
-                uniforms.uniform_selected.borrow_mut().set(scene.select_frag);
+                uniforms.mvp.borrow_mut().set(mvp_m);
+                uniforms.selected.borrow_mut().set(scene.select_frag);
             }
             if let Some(p) = program_container.get_program() {
-                render(&gl, p.borrow_mut().gl_program(0), &program_objects, &scene);
+                render(&gl, p.borrow_mut().gl_program(), &program_objects, &scene);
             } else {
                 panic!("No program to render");
             }
