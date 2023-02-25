@@ -1,5 +1,7 @@
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Read;
 
 use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
 use clap::{arg, Arg, ArgAction, Command};
@@ -12,6 +14,7 @@ use faithful::pop::landscape::globe::texture_globe;
 use faithful::pop::landscape::land::texture_land;
 use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
+use faithful::pop::pls::decode;
 
 /******************************************************************************/
 
@@ -72,6 +75,14 @@ fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: 
         }
     }
     img
+}
+
+fn decode_pls(pls_path: &Path) -> Vec<u8> {
+    let mut file = File::options().read(true).open(pls_path).unwrap();
+    let mut data = Vec::new();
+    let _file_size = file.read_to_end(&mut data);
+    decode(&mut data);
+    data
 }
 
 /*
@@ -159,6 +170,17 @@ fn cli() -> Command {
                 .about("Create palette texture image")
                 .arg(arg!(<num> "Level number"))
                 .arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("pls")
+                .about("Decode pls files")
+                .arg(
+                    Arg::new("pls_path")
+                    .action(ArgAction::Set)
+                    .value_name("PLS_PATH")
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .help("Path to pls file")
+                )
         )
 }
 
@@ -268,6 +290,11 @@ fn main() {
             let level_res = LevelRes::new(base_path, level_num, None);
             let img = draw_palette(&level_res.params.palette, 1024, 1024, 128);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
+        }
+        Some(("pls", sub_matches)) => {
+            let path = sub_matches.get_one::<PathBuf>("pls_path").expect("required");
+            let pls_data = decode_pls(path);
+            std::io::stdout().write_all(&pls_data).unwrap();
         }
         _ => {}
     }
