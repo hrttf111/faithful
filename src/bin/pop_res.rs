@@ -1,12 +1,12 @@
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
 
 use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
 use clap::{arg, Arg, ArgAction, Command};
 
-use faithful::pop::level::GlobeTextureParams;
+use faithful::pop::level::{GlobeTextureParams, LevelPaths};
 use faithful::pop::landscape::LevelRes;
 use faithful::pop::landscape::common::LandPos;
 use faithful::pop::landscape::minimap::texture_minimap;
@@ -15,11 +15,12 @@ use faithful::pop::landscape::land::texture_land;
 use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
 use faithful::pop::pls::decode;
+use faithful::pop::bl320::{parse_bl320, bl320_path, BL320Sprite};
 
 /******************************************************************************/
 
 const DEFAULT_IMG_FORMAT: ImageOutputFormat = ImageOutputFormat::Bmp;
-const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop";
+const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop/data";
 
 fn draw_palette(pal: &[u8], width: u32, height: u32, num_colors: u32) -> RgbImage {
     let mut img = RgbImage::new(width, height);
@@ -72,6 +73,29 @@ fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: 
                     img.put_pixel(h, v, Rgb([buf[0], buf[1], buf[2]]));
                 }
             }
+        }
+    }
+    img
+}
+
+fn draw_bl320(pal: &[u8], sprites: &[BL320Sprite]) -> RgbImage {
+    let sw = 256;
+    let width = 256 * sprites.len();
+    let mut texture = vec![0; sw * sw * sprites.len()];
+    for i in 0..sw {
+        for (k, sprite) in sprites.iter().enumerate() {
+            for j in 0..sw {
+                texture[i * width + sw * k + j] = sprite.data[i*sw + j];
+            }
+        }
+    }
+    let mut img = RgbImage::new(width as u32, sw as u32);
+    for i in 0..sw {
+        for j in 0..width {
+            let palette_index = texture[i*width + j] as usize;
+            let palette_index = palette_index * 4;
+            let buf: &[u8] = &pal[palette_index..=(palette_index+2)];
+            img.put_pixel(j as u32, i as u32, Rgb([buf[0], buf[1], buf[2]]));
         }
     }
     img
@@ -151,6 +175,13 @@ fn cli() -> Command {
                 .arg(arg!(<num> "Level number"))
                 .arg(arg!(<offset> "Offset"))
                 .arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("bl320")
+                .about("Create image for BL320")
+                .args(&args)
+                //.arg(arg!(<num> "Landtype"))
+                //.arg_required_else_help(true),
         )
         .subcommand(
             Command::new("bigf0")
@@ -257,6 +288,21 @@ fn main() {
             let level_type = sub_matches.get_one::<String>("landtype");
             let tex_move = sub_matches.get_one::<String>("move").and_then(|s| parse_move(s));
             make_texture_land(TextureType::Land, level_num, base_path, level_type, tex_move);
+        }
+        Some(("bl320", sub_matches)) => {
+            let level_type: String = sub_matches.get_one::<String>("landtype").expect("required").parse().unwrap();
+            let paths = LevelPaths::from_base(base_path, &level_type);
+            let path = bl320_path(base_path, &level_type);
+            let pal = {
+                //println!("{}", paths.palette.to_str().unwrap());
+                let mut f = OpenOptions::new().read(true).open(paths.palette).unwrap();
+                let mut vec = Vec::new();
+                f.read_to_end(&mut vec).unwrap();
+                vec
+            };
+            let sprites = parse_bl320(&path);
+            let img = draw_bl320(&pal, &sprites);
+            write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("minimap", sub_matches)) => {
             let level_num = sub_matches.get_one::<String>("num").expect("required").parse().unwrap();
