@@ -1,12 +1,12 @@
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Read;
 
 use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
 use clap::{arg, Arg, ArgAction, Command};
 
-use faithful::pop::level::{GlobeTextureParams, LevelPaths};
+use faithful::pop::level::{GlobeTextureParams, LevelPaths, read_pal};
 use faithful::pop::landscape::LevelRes;
 use faithful::pop::landscape::common::LandPos;
 use faithful::pop::landscape::minimap::texture_minimap;
@@ -15,7 +15,7 @@ use faithful::pop::landscape::land::texture_land;
 use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
 use faithful::pop::pls::decode;
-use faithful::pop::bl320::{parse_bl320, bl320_path, BL320Sprite};
+use faithful::pop::bl320::{parse_bl320, parse_bl160, BLSprite};
 
 /******************************************************************************/
 
@@ -78,19 +78,28 @@ fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: 
     img
 }
 
-fn draw_bl320(pal: &[u8], sprites: &[BL320Sprite]) -> RgbImage {
-    let sw = 256;
-    let width = 256 * sprites.len();
-    let mut texture = vec![0; sw * sw * sprites.len()];
-    for i in 0..sw {
+fn draw_bl(pal: &[u8], sprites: &[BLSprite]) -> RgbImage {
+    let (width, height, sprite_width) = {
+        let mut width = 0;
+        let mut height = 0;
+        let mut sprite_width = 0;
+        for sprite in sprites {
+            width += sprite.width as usize;
+            height = std::cmp::max(height, sprite.height as usize);
+            sprite_width = sprite.width as usize;
+        }
+        (width, height, sprite_width)
+    };
+    let mut texture = vec![0; width * height];
+    for i in 0..height {
         for (k, sprite) in sprites.iter().enumerate() {
-            for j in 0..sw {
-                texture[i * width + sw * k + j] = sprite.data[i*sw + j];
+            for j in 0..sprite_width {
+                texture[i * width + sprite_width * k + j] = sprite.data[i * sprite_width + j];
             }
         }
     }
-    let mut img = RgbImage::new(width as u32, sw as u32);
-    for i in 0..sw {
+    let mut img = RgbImage::new(width as u32, height as u32);
+    for i in 0..height {
         for j in 0..width {
             let palette_index = texture[i*width + j] as usize;
             let palette_index = palette_index * 4;
@@ -180,8 +189,13 @@ fn cli() -> Command {
             Command::new("bl320")
                 .about("Create image for BL320")
                 .args(&args)
-                //.arg(arg!(<num> "Landtype"))
-                //.arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("bl160")
+                .about("Create image for BL160")
+                .args(&args)
+                .arg(arg!(<width> "Sprite width"))
+                .arg(arg!(<height> "Sprite height"))
         )
         .subcommand(
             Command::new("bigf0")
@@ -292,16 +306,19 @@ fn main() {
         Some(("bl320", sub_matches)) => {
             let level_type: String = sub_matches.get_one::<String>("landtype").expect("required").parse().unwrap();
             let paths = LevelPaths::from_base(base_path, &level_type);
-            let path = bl320_path(base_path, &level_type);
-            let pal = {
-                //println!("{}", paths.palette.to_str().unwrap());
-                let mut f = OpenOptions::new().read(true).open(paths.palette).unwrap();
-                let mut vec = Vec::new();
-                f.read_to_end(&mut vec).unwrap();
-                vec
-            };
-            let sprites = parse_bl320(&path);
-            let img = draw_bl320(&pal, &sprites);
+            let pal = read_pal(&paths);
+            let sprites = parse_bl320(&paths.bl320);
+            let img = draw_bl(&pal, &sprites);
+            write_img_stdout(&img, DEFAULT_IMG_FORMAT);
+        }
+        Some(("bl160", sub_matches)) => {
+            let level_type: String = sub_matches.get_one::<String>("landtype").expect("required").parse().unwrap();
+            let width: usize = sub_matches.get_one::<String>("width").expect("required").parse().unwrap();
+            let height: usize = sub_matches.get_one::<String>("height").expect("required").parse().unwrap();
+            let paths = LevelPaths::from_base(base_path, &level_type);
+            let pal = read_pal(&paths);
+            let sprites = parse_bl160(width, height, &paths.bl160);
+            let img = draw_bl(&pal, &sprites);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("minimap", sub_matches)) => {

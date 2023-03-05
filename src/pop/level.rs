@@ -10,6 +10,8 @@ pub struct LevelPaths {
     pub bigf0: PathBuf,
     pub cliff0: PathBuf,
     pub fade0: PathBuf,
+    pub bl320: PathBuf,
+    pub bl160: PathBuf,
 }
 
 fn mk_based_path(base: &Path, s: String) -> PathBuf {
@@ -20,12 +22,15 @@ fn mk_based_path(base: &Path, s: String) -> PathBuf {
 
 impl LevelPaths {
     pub fn from_base(base: &Path, key: &str) -> Self {
+        let key_upper = key.to_uppercase();
         Self {
             palette: mk_based_path(base, format!("pal0-{key}.dat")),
             disp0: mk_based_path(base, format!("disp0-{key}.dat")),
             bigf0: mk_based_path(base, format!("bigf0-{key}.dat")),
             cliff0: mk_based_path(base, format!("cliff0-{key}.dat")),
             fade0: mk_based_path(base, format!("fade0-{key}.dat")),
+            bl320: mk_based_path(base, format!("BL320-{key_upper}.DAT")),
+            bl160: mk_based_path(base, format!("BL160-{key_upper}.DAT")),
         }
     }
 
@@ -100,6 +105,10 @@ fn read_disp(path: &Path) -> Vec<i8> {
         }
     }
     disp
+}
+
+pub fn read_pal(paths: &LevelPaths) -> Vec<u8> {
+    read_bin(&paths.palette)
 }
 
 /******************************************************************************/
