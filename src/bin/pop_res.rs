@@ -6,7 +6,7 @@ use std::io::Read;
 use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
 use clap::{arg, Arg, ArgAction, Command};
 
-use faithful::pop::level::{GlobeTextureParams, LevelPaths, read_pal};
+use faithful::pop::level::{GlobeTextureParams, LevelPaths, ObjectPaths, read_pal};
 use faithful::pop::landscape::LevelRes;
 use faithful::pop::landscape::common::LandPos;
 use faithful::pop::landscape::minimap::texture_minimap;
@@ -16,11 +16,13 @@ use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
 use faithful::pop::pls::decode;
 use faithful::pop::bl320::{parse_bl320, parse_bl160, BLSprite};
+use faithful::pop::objects::{ObjectRaw, Shape, PointRaw, FaceRaw, BinReaderDeserializer};
 
 /******************************************************************************/
 
 const DEFAULT_IMG_FORMAT: ImageOutputFormat = ImageOutputFormat::Bmp;
-const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop/data";
+//const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop/data";
+const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop";
 
 fn draw_palette(pal: &[u8], width: u32, height: u32, num_colors: u32) -> RgbImage {
     let mut img = RgbImage::new(width, height);
@@ -217,6 +219,12 @@ fn cli() -> Command {
                 .arg_required_else_help(true),
         )
         .subcommand(
+            Command::new("objects")
+                .about("Objects commands")
+                .arg(arg!(<num> "Bank num"))
+                .arg_required_else_help(true),
+        )
+        .subcommand(
             Command::new("pls")
                 .about("Decode pls files")
                 .arg(
@@ -353,6 +361,30 @@ fn main() {
             let level_res = LevelRes::new(base_path, level_num, None);
             let img = draw_palette(&level_res.params.palette, 1024, 1024, 128);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
+        }
+        Some(("objects", sub_matches)) => {
+            let bank_num = sub_matches.get_one::<String>("num").expect("required");
+            let paths = ObjectPaths::from_base(base_path, bank_num);
+            let objects = ObjectRaw::from_file(&paths.objs0_dat);
+            let points = PointRaw::from_file(&paths.pnts0);
+            let faces = FaceRaw::from_file(&paths.facs0);
+            println!("Num objects = {}", objects.len());
+            for obj in &objects {
+                println!("  {:?}", obj);
+            }
+            let shapes = Shape::from_file(&paths.shapes);
+            println!("Num shapes = {}", shapes.len());
+            for shape in shapes {
+                println!("  {:?}", shape);
+            }
+            println!("Num points = {}", points.len());
+            for point in &points {
+                println!("  {:?}", point);
+            }
+            println!("Num faces = {}", faces.len());
+            for face in &faces {
+                println!("  {:?}", face);
+            }
         }
         Some(("pls", sub_matches)) => {
             let path = sub_matches.get_one::<PathBuf>("pls_path").expect("required");

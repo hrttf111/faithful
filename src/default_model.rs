@@ -30,13 +30,17 @@ impl GlModel for DefaultModel {
     fn vertex_attributes(&self) -> Vec<GlVertexAttr> {
         vec![GlVertexAttr::new(0, 3, GL_FLOAT, 0)]
     }
+
+    fn vertex_size(&self) -> usize {
+        std::mem::size_of::<f32>() * 3
+    }
     
     fn vertex_num(&self) -> usize {
         self.vertices.len()
     }
 
     fn vertex_buffer_size(&self) -> usize {
-        self.vertices.len() * std::mem::size_of::<f32>() * 3
+        self.vertices.len() * self.vertex_size()
     }
 
     fn index_num(&self) -> usize {
@@ -55,12 +59,12 @@ impl GlModel for DefaultModel {
         !self.indices.is_empty()
     }
 
-    fn add_to_buffer(&self, offset: usize, buffer: &mut GlBufferStatic) -> usize {
+    fn add_to_buffer(&self, offset: usize, _total_vertices: usize, buffer: &mut GlBufferStatic) -> usize {
         if self.vertices.is_empty() {
             return 0;
         }
         let slice = self.vertices.as_slice();
-        buffer.update(offset, slice).unwrap();
+        buffer.update(offset * self.vertex_size(), slice).unwrap();
         self.vertex_buffer_size()
     }
 

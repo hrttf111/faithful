@@ -43,6 +43,29 @@ impl LevelPaths {
     }
 }
 
+pub struct ObjectPaths {
+    pub objs0_dat: PathBuf,
+    pub objs0_ver: PathBuf,
+    pub pnts0: PathBuf,
+    pub facs0: PathBuf,
+    pub morph0: PathBuf,
+    pub shapes: PathBuf,
+}
+
+impl ObjectPaths {
+    pub fn from_base(base: &Path, key: &str) -> Self {
+        Self {
+            //objs0_dat: mk_based_path(base, format!("objects/objs0-{key}.dat")),
+            objs0_dat: mk_based_path(base, format!("objects/OBJS0-{key}.DAT")),
+            objs0_ver: mk_based_path(base, format!("objects/objs0-{key}.ver")),
+            pnts0: mk_based_path(base, format!("objects/PNTS0-{key}.DAT")),
+            facs0: mk_based_path(base, format!("objects/FACS0-{key}.DAT")),
+            morph0: mk_based_path(base, format!("objects/morph0-{key}.dat")),
+            shapes: mk_based_path(base, "objects/SHAPES.DAT".to_string()),
+        }
+    }
+}
+
 /******************************************************************************/
 
 pub fn read_landscape_type(hdr_path: &Path) -> String {

@@ -21,12 +21,17 @@ impl GlModel for LandscapeModel {
     fn vertex_attributes(&self) -> Vec<GlVertexAttr> {
         vec![GlVertexAttr::new(0, 2, GL_UNSIGNED_BYTE, 0)]
     }
+
+    fn vertex_size(&self) -> usize {
+        std::mem::size_of::<u8>() * 2
+    }
+
     fn vertex_num(&self) -> usize {
         self.vertices.len()
     }
 
     fn vertex_buffer_size(&self) -> usize {
-        self.vertices.len() * std::mem::size_of::<u8>() * 2
+        self.vertices.len() * self.vertex_size()
     }
 
     fn index_num(&self) -> usize {
@@ -45,7 +50,7 @@ impl GlModel for LandscapeModel {
         false
     }
 
-    fn add_to_buffer(&self, offset: usize, buffer: &mut GlBufferStatic) -> usize {
+    fn add_to_buffer(&self, offset: usize, _total_vertices: usize, buffer: &mut GlBufferStatic) -> usize {
         let slice = self.vertices.as_slice();
         buffer.update(offset, slice).unwrap();
         self.vertex_buffer_size()

@@ -30,6 +30,10 @@ pub struct GlVao {
     attrs: Vec<GlVertexAttr>,
 }
 
+fn is_type_int(elem_type: GLenum) -> bool {
+    matches!(elem_type, GL_SHORT|GL_UNSIGNED_SHORT|GL_INT|GL_UNSIGNED_INT)
+}
+
 impl GlVao {
     pub fn new(gl: &GlCtx) -> Result<Self, String> {
         let mut handle: c_uint = 0;
@@ -73,23 +77,28 @@ impl GlVao {
                 if let Err(error) = gl_get_error(gl) {
                     return Err(format!("EnableVertexAttribArray error = {error:?}"))
                 }
-                if attr.offset > 0 {
-                    gl.VertexAttribPointer(
-                        attr.index,
-                        attr.elems as i32,
-                        attr.elem_type,
-                        0 /*GL_FALSE*/,
-                        0,
-                        attr.offset as *const c_void
-                    );
+                let ptr = if attr.offset > 0 {
+                    attr.offset as *const c_void
                 } else {
+                    null()
+                };
+                if is_type_int(attr.elem_type) {
+                    gl.VertexAttribIPointer(
+                        attr.index,
+                        attr.elems as i32,
+                        attr.elem_type,
+                        0,
+                        ptr
+                    );
+                }
+                else {
                     gl.VertexAttribPointer(
                         attr.index,
                         attr.elems as i32,
                         attr.elem_type,
                         0 /*GL_FALSE*/,
                         0,
-                        null()
+                        ptr
                     );
                 }
                 if let Err(error) = gl_get_error(gl) {

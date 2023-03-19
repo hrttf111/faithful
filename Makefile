@@ -1,7 +1,7 @@
 SHADER_PATH=shaders
 
-SHADERS_VERT = landscape.vert objects.vert
-SHADERS_FRAG = landscape.frag landscape_cpu.frag landscape_full.frag landscape_grad.frag landscape_cell.frag objects.frag
+SHADERS_VERT = landscape.vert objects.vert objects_1.vert
+SHADERS_FRAG = landscape.frag landscape_cpu.frag landscape_full.frag landscape_grad.frag landscape_cell.frag objects.frag objects_1.frag
 SHADERS_SPV = $(SHADERS_VERT:.vert=.vert.spv) $(SHADERS_FRAG:.frag=.frag.spv)
 
 GLSLC_ARGS = -fauto-bind-uniforms -fauto-map-locations

@@ -16,6 +16,7 @@ use crate::intersect::intersect_iter;
 pub trait GlModel {
     type BatchType;
     fn vertex_attributes(&self) -> Vec<GlVertexAttr>;
+    fn vertex_size(&self) -> usize;
 
     fn vertex_num(&self) -> usize;
     fn vertex_buffer_size(&self) -> usize;
@@ -25,7 +26,7 @@ pub trait GlModel {
     fn index_gl_type(&self) -> GLenum;
     fn is_indexed(&self) -> bool;
 
-    fn add_to_buffer(&self, offset: usize, buffer: &mut GlBufferStatic) -> usize;
+    fn add_to_buffer(&self, offset: usize, total_vertices: usize, buffer: &mut GlBufferStatic) -> usize;
     fn add_to_buffer_elem(&self, offset: usize, buffer: &mut GlBufferStatic) -> usize;
 }
 
@@ -97,10 +98,12 @@ impl<M> ModelEnvelop<M> where M: GlModel, M::BatchType: GlModelBatch<EModel<M>> 
                                              .collect();
         let mut vao = GlVao::new(gl).unwrap();
         vao.bind();
+        let total_vertices = models_e.iter().rfold(0, |x, e| x + e.model.vertex_num());
         let mut array_buffer = make_array_buffer::<M>(gl, &models_e);
         let mut element_buffer = make_element_buffer::<M>(gl, &models_e);
         models_e.iter().fold(0, |offset, e| {
-            offset + e.model.add_to_buffer(offset, &mut array_buffer)
+            e.model.add_to_buffer(offset, total_vertices, &mut array_buffer);
+            offset + e.model.vertex_num()
         });
         models_e.iter_mut().fold(0, |offset, e| {
             offset + e.model.add_to_buffer_elem(offset, &mut element_buffer)
@@ -153,10 +156,11 @@ impl<M> ModelEnvelop<M> where M: GlModel, M::BatchType: GlModelBatch<EModel<M>> 
         if index >= self.models.len() {
             return;
         }
+        let total_vertices = self.models.iter().rfold(0, |x, e| x + e.model.vertex_num());
         let (offset, offset_indices) = self.models.iter().take(index).fold((0, 0), |(offset, offset_indices), m| {
             (offset + m.model.vertex_buffer_size(), offset_indices + m.model.index_buffer_size())
         });
-        self.models[index].model.add_to_buffer(offset, &mut self.array_buffer);
+        self.models[index].model.add_to_buffer(offset, total_vertices, &mut self.array_buffer);
         self.models[index].model.add_to_buffer_elem(offset_indices, &mut self.element_buffer);
     }
 }

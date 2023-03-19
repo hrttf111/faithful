@@ -513,7 +513,7 @@ fn update_level(base: &Path, level_num: u8, landscape_mesh: &mut LandscapeMeshS,
     RefCell::new(level_res)
 }
 
-fn render(gl: &GlCtx, program_landscape: &GlProgram, program_objects: &GlProgram, scene: &Scene) {
+fn render(gl: &GlCtx, program_landscape: &GlProgram, program_select: &GlProgram, scene: &Scene) {
     unsafe {
         gl.Enable(GL_DEPTH_TEST);
         gl.Clear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -522,7 +522,7 @@ fn render(gl: &GlCtx, program_landscape: &GlProgram, program_objects: &GlProgram
     }
     program_landscape.use_program();
     scene.model_main.draw(1);
-    program_objects.use_program();
+    program_select.use_program();
     scene.model_select.draw(1);
 }
 
@@ -647,14 +647,15 @@ fn main() {
         heights_buffer
     };
 
-    let mut program_objects = {
+    //
+    let mut program_select = {
         let mut program = GlProgram::new(&gl);
         let loader = GlShaderLoaderBinary {};
         GlShader::attach_from_file("vert", Path::new("shaders/objects.vert.spv"), &mut program, &loader, GL_VERTEX_SHADER);
         GlShader::attach_from_file("frag", Path::new("shaders/objects.frag.spv"), &mut program, &loader, GL_FRAGMENT_SHADER);
         program
     };
-    program_objects.use_program();
+    program_select.use_program();
     let _obj_palette = {
         let params = TextureParams{target: GL_TEXTURE_1D, internal_format: GL_RGB8UI, format: GL_RGB_INTEGER, data_type: GL_UNSIGNED_BYTE, nearest: true};
         let uniform = Some(0);
@@ -662,9 +663,11 @@ fn main() {
         let width = color_textures.len();
         GlTexture::new_1d(&gl, uniform, &params, width, color_textures.as_slice())
     }.unwrap();
-    program_objects.set_uniform(0, uniforms.mvp.clone());
-    program_objects.set_uniform(1, uniforms.mvp_model.clone());
-    program_objects.set_uniform(2, uniforms.selected.clone());
+
+    program_select.set_uniform(0, uniforms.mvp.clone());
+    program_select.set_uniform(1, uniforms.mvp_model.clone());
+    program_select.set_uniform(2, uniforms.selected.clone());
+    //
 
     let mut program_container = LandscapeProgramContainer::new();
     program_container.add_program(MainLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
@@ -822,7 +825,7 @@ fn main() {
                 uniforms.selected.borrow_mut().set(scene.select_frag);
             }
             if let Some(p) = program_container.get_program() {
-                render(&gl, p.borrow_mut().gl_program(), &program_objects, &scene);
+                render(&gl, p.borrow_mut().gl_program(), &program_select, &scene);
             } else {
                 panic!("No program to render");
             }

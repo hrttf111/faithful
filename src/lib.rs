@@ -1,5 +1,6 @@
 pub mod model;
 pub mod default_model;
+pub mod tex_model;
 pub mod view;
 pub mod intersect;
 pub mod envelop;
