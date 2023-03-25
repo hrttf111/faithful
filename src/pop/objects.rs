@@ -1,32 +1,10 @@
 use std::path::Path;
-use std::fs::File;
 use std::io::Read;
 use core::mem::size_of;
 use core::slice::Iter;
 
+use crate::pop::types::{BinDeserializer, from_reader};
 use crate::pop::level::ObjectPaths;
-
-/******************************************************************************/
-
-pub trait BinReaderDeserializer {
-    fn from_reader<R: Read>(reader: &mut R) -> Vec<Self> where Self: Sized;
-
-    fn from_file(path: &Path) -> Vec<Self> where Self: Sized {
-        let mut file = File::options().read(true).open(path).unwrap();
-        Self::from_reader(&mut file)
-    }
-}
-
-fn from_reader<T, const S: usize, R: Read>(reader: &mut R) -> Vec<T> where T: Copy {
-    let mut items = Vec::new();
-    let mut data = [0u8; S];
-    while let Ok(()) = reader.read_exact(&mut data) {
-        items.push(unsafe {
-            *(data.as_ptr() as *const T)
-        });
-    }
-    items
-}
 
 /******************************************************************************/
 
@@ -58,8 +36,8 @@ pub struct ObjectRaw {
     f13: u16,
 }
 
-impl BinReaderDeserializer for ObjectRaw {
-    fn from_reader<R: Read>(reader: &mut R) -> Vec<Self> {
+impl BinDeserializer for ObjectRaw {
+    fn from_reader<R: Read>(reader: &mut R) -> Option<Self> {
         from_reader::<ObjectRaw, {size_of::<ObjectRaw>()}, R>(reader)
     }
 }
@@ -77,8 +55,8 @@ pub struct Shape {
     ptr: u32,
 }
 
-impl BinReaderDeserializer for Shape {
-    fn from_reader<R: Read>(reader: &mut R) -> Vec<Self> {
+impl BinDeserializer for Shape {
+    fn from_reader<R: Read>(reader: &mut R) -> Option<Self> {
         from_reader::<Self, {size_of::<Self>()}, R>(reader)
     }
 }
@@ -93,8 +71,8 @@ pub struct PointRaw {
     z: i16,
 }
 
-impl BinReaderDeserializer for PointRaw {
-    fn from_reader<R: Read>(reader: &mut R) -> Vec<Self> {
+impl BinDeserializer for PointRaw {
+    fn from_reader<R: Read>(reader: &mut R) -> Option<Self> {
         from_reader::<Self, {size_of::<Self>()}, R>(reader)
     }
 }
@@ -130,8 +108,8 @@ pub struct FaceRaw {
     flags2: u8,
 }
 
-impl BinReaderDeserializer for FaceRaw {
-    fn from_reader<R: Read>(reader: &mut R) -> Vec<Self> {
+impl BinDeserializer for FaceRaw {
+    fn from_reader<R: Read>(reader: &mut R) -> Option<Self> {
         from_reader::<Self, {size_of::<Self>()}, R>(reader)
     }
 }
@@ -216,9 +194,9 @@ impl Object3D {
 
     pub fn from_file(base: &Path, bank_num: &str) -> Vec<Self> {
         let paths = ObjectPaths::from_base(base, bank_num);
-        let objects = ObjectRaw::from_file(&paths.objs0_dat);
-        let points = PointRaw::from_file(&paths.pnts0);
-        let faces = FaceRaw::from_file(&paths.facs0);
+        let objects = ObjectRaw::from_file_vec(&paths.objs0_dat);
+        let points = PointRaw::from_file_vec(&paths.pnts0);
+        let faces = FaceRaw::from_file_vec(&paths.facs0);
         Self::create_objects(&objects, &faces, &points)
     }
 

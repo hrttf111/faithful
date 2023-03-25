@@ -59,7 +59,7 @@ fn mk_pop_object(object: &Object3D) -> TexModel {
 fn mk_pop_envelope(gl: &GlCtx, mvp_model: &GlUniform1Cell<Matrix4::<f32>>, object: &Object3D) -> ModelEnvelop<TexModel> {
     let model = mk_pop_object(object);
     let m = vec![(RenderType::Triangles, model)];
-    let mut e = ModelEnvelop::<TexModel>::new(gl, &mvp_model, m);
+    let mut e = ModelEnvelop::<TexModel>::new(gl, mvp_model, m);
     if let Some(m) = e.get(0) {
         m.location[1] = -0.5;
         m.scale = (object.coord_scale() / 300.0) * 0.5;

@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Read;
 
-use image::{RgbImage, Rgb, ImageOutputFormat, ImageBuffer};
+use image::{RgbImage, RgbaImage, Rgb, GrayImage, ImageFormat, ImageOutputFormat, ImageBuffer, DynamicImage};
 use clap::{arg, Arg, ArgAction, Command};
 
 use faithful::pop::level::{GlobeTextureParams, LevelPaths, ObjectPaths, read_pal};
+use faithful::pop::psfb::ContainerPSFB;
 use faithful::pop::landscape::LevelRes;
 use faithful::pop::landscape::common::LandPos;
 use faithful::pop::landscape::minimap::texture_minimap;
@@ -15,8 +16,9 @@ use faithful::pop::landscape::land::texture_land;
 use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
 use faithful::pop::pls::decode;
-use faithful::pop::bl320::{parse_bl320, parse_bl160, BLSprite};
-use faithful::pop::objects::{ObjectRaw, Shape, PointRaw, FaceRaw, BinReaderDeserializer};
+use faithful::pop::bl320::{parse_bl320, parse_bl160};
+use faithful::pop::types::{BinDeserializer, Image};
+use faithful::pop::objects::{ObjectRaw, Shape, PointRaw, FaceRaw};
 
 /******************************************************************************/
 
@@ -58,7 +60,19 @@ fn make_disp_texture2(params: &GlobeTextureParams) -> RgbImage {
     img
 }
 
-fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: u32, disp_h: u32) -> RgbImage {
+#[allow(clippy::needless_range_loop)]
+fn draw_texture(pal: &[u8], width: u32, texture: Vec<u8>) -> RgbaImage {
+    let img = GrayImage::from_raw(width as u32, width as u32, texture).unwrap();
+    let mut pal_tup = [(0u8, 0u8, 0u8); 256];
+    for i in 0..255 {
+        let pi = i * 4;
+        pal_tup[i] = (pal[pi], pal[pi+1], pal[pi+2]);
+    }
+    img.expand_palette(&pal_tup, None)
+}
+
+/*
+fn draw_texture2(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: u32, disp_h: u32) -> RgbImage {
     let mut img = RgbImage::new(width, width);
     let pixel_size = width / tex_width;
     for i in 0..tex_width {
@@ -79,16 +93,17 @@ fn draw_texture(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: 
     }
     img
 }
+*/
 
-fn draw_bl(pal: &[u8], sprites: &[BLSprite]) -> RgbImage {
+fn draw_images(pal: &[u8], sprites: &[Image]) -> RgbImage {
     let (width, height, sprite_width) = {
         let mut width = 0;
         let mut height = 0;
         let mut sprite_width = 0;
         for sprite in sprites {
-            width += sprite.width as usize;
-            height = std::cmp::max(height, sprite.height as usize);
-            sprite_width = sprite.width as usize;
+            width += sprite.width;
+            height = std::cmp::max(height, sprite.height);
+            sprite_width = sprite.width;
         }
         (width, height, sprite_width)
     };
@@ -112,12 +127,41 @@ fn draw_bl(pal: &[u8], sprites: &[BLSprite]) -> RgbImage {
     img
 }
 
+fn image_to_gray(sprite: Image) -> GrayImage {
+    let width = sprite.width;
+    let height = sprite.height;
+    GrayImage::from_raw(width as u32, height as u32, sprite.data).unwrap()
+}
+
 fn decode_pls(pls_path: &Path) -> Vec<u8> {
     let mut file = File::options().read(true).open(pls_path).unwrap();
     let mut data = Vec::new();
     let _file_size = file.read_to_end(&mut data);
     decode(&mut data);
     data
+}
+
+fn draw_image(sprite: Image, palette: &Option<[(u8, u8, u8); 256]>) -> DynamicImage {
+    let img = image_to_gray(sprite);
+    if let Some(p) = palette {
+        return DynamicImage::ImageRgba8(img.expand_palette(p, None));
+    }
+    DynamicImage::ImageLuma8(img)
+}
+
+fn draw_sprites_img(psfb: &ContainerPSFB, start: u32, num: u32, prefix: &Path, palette: &Option<[(u8, u8, u8); 256]>) {
+    if start >= num {
+        return;
+    }
+    for i in start..(start+num) {
+        if let Some(sprite) = psfb.get_image(i as usize) {
+            let name = format!("{:}_{:?}.bmp", prefix.to_str().unwrap(), i);
+            println!("{}", name);
+            let path = Path::new(&name);
+            let img = draw_image(sprite, palette);
+            img.save_with_format(&path, ImageFormat::Bmp).unwrap();
+        }
+    }
 }
 
 /*
@@ -235,6 +279,46 @@ fn cli() -> Command {
                     .help("Path to pls file")
                 )
         )
+        .subcommand(
+            Command::new("psfb")
+                .about("Read sprites from psfb file")
+                .args([
+                    Arg::new("path")
+                        .long("path")
+                        .action(ArgAction::Set)
+                        .value_name("FILE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to PSFB file"),
+                    Arg::new("palette")
+                        .long("palette")
+                        .action(ArgAction::Set)
+                        .value_name("PALETTE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to palette file"),
+                    Arg::new("info")
+                        .long("info")
+                        .action(ArgAction::SetTrue)
+                        .help("Show file info"),
+                    Arg::new("start")
+                        .long("start")
+                        .action(ArgAction::Set)
+                        .value_name("START_NUM")
+                        .value_parser(clap::value_parser!(u32).range(0..20000))
+                        .help("Start from sprite number"),
+                    Arg::new("num")
+                        .long("num")
+                        .action(ArgAction::Set)
+                        .value_name("SPRITE_NUM")
+                        .value_parser(clap::value_parser!(u32).range(0..20000))
+                        .help("Draw number of sprites"),
+                    Arg::new("prefix")
+                        .long("prefix")
+                        .action(ArgAction::Set)
+                        .value_name("PREFIX_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Prefix for generated images"),
+                ]).arg_required_else_help(true),
+        )
 }
 
 enum TextureType {
@@ -252,11 +336,17 @@ fn write_img_stdout<P, C>(img: &ImageBuffer<P, C>, format: ImageOutputFormat)
     std::io::stdout().write_all(&temp_vec).unwrap();
 }
 
+fn write_dyn_img_stdout(img: &DynamicImage, format: ImageOutputFormat) {
+    let mut temp_vec = Vec::new();
+    img.write_to(&mut Cursor::new(&mut temp_vec), format).unwrap();
+    std::io::stdout().write_all(&temp_vec).unwrap();
+}
+
 fn make_texture_land(tex_type: TextureType
                      , level_num: u8
                      , base: &Path
                      , level_type_opt: Option<&String>
-                     , tex_move: Option<(u32, u32)>
+                     , _tex_move: Option<(u32, u32)>
                      ) {
     let level_res = LevelRes::new(base, level_num, level_type_opt.map(|s| s.as_str()));
 
@@ -264,20 +354,20 @@ fn make_texture_land(tex_type: TextureType
     let params_globe = &level_res.params;
     let land = LandPos::from_landscape(&level_res.landscape);
 
-    let (h, v) = tex_move.unwrap_or((0, 0));
+    //let (h, v) = tex_move.unwrap_or((0, 0));
 
     let img = match tex_type {
         TextureType::Land => {
             let texture = texture_land(land_size, &land, params_globe);
-            draw_texture(&params_globe.palette, ((land_size)* 32) as u32, &texture, ((land_size)* 32) as u32, h, v)
+            draw_texture(&params_globe.palette, ((land_size)* 32) as u32, texture)
         }
         TextureType::Globe => {
             let texture = texture_globe(land_size, &land, params_globe);
-            draw_texture(&params_globe.palette, ((land_size)* 8) as u32, &texture, ((land_size)* 8) as u32, h, v)
+            draw_texture(&params_globe.palette, (land_size * 8) as u32, texture)
         }
         TextureType::Minimap => {
             let texture = texture_minimap(land_size, true, &land, &params_globe.bigf0);
-            draw_texture(&params_globe.palette, (land_size * 8) as u32, &texture, land_size as u32, h, v)
+            draw_texture(&params_globe.palette, land_size as u32, texture)
         }
     };
 
@@ -294,6 +384,7 @@ fn parse_move(s: &str) -> Option<(u32, u32)> {
     Some((a.parse().unwrap(), b.parse().unwrap()))
 }
 
+#[allow(clippy::needless_range_loop)]
 fn main() {
     let base_path = Path::new(DEFAULT_BASE_PATH);
 
@@ -316,7 +407,7 @@ fn main() {
             let paths = LevelPaths::from_base(base_path, &level_type);
             let pal = read_pal(&paths);
             let sprites = parse_bl320(&paths.bl320);
-            let img = draw_bl(&pal, &sprites);
+            let img = draw_images(&pal, &sprites);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("bl160", sub_matches)) => {
@@ -326,7 +417,7 @@ fn main() {
             let paths = LevelPaths::from_base(base_path, &level_type);
             let pal = read_pal(&paths);
             let sprites = parse_bl160(width, height, &paths.bl160);
-            let img = draw_bl(&pal, &sprites);
+            let img = draw_images(&pal, &sprites);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("minimap", sub_matches)) => {
@@ -339,7 +430,7 @@ fn main() {
             let offset = sub_matches.get_one::<String>("offset").expect("required").parse().unwrap();
             let level_res = LevelRes::new(base_path, level_num, None);
             let texture = texture_water(offset, &level_res.params);
-            let img = draw_texture(&level_res.params.palette, 256_u32, &texture, 256_u32, 0, 0);
+            let img = draw_texture(&level_res.params.palette, 256_u32, texture);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("bigf0", sub_matches)) => {
@@ -347,7 +438,7 @@ fn main() {
             let height = sub_matches.get_one::<String>("height").expect("required").parse().unwrap();
             let level_res = LevelRes::new(base_path, level_num, None);
             let texture = texture_bigf0(height, &level_res.params);
-            let img = draw_texture(&level_res.params.palette, 256_u32, &texture, 256_u32, 0, 0);
+            let img = draw_texture(&level_res.params.palette, 256_u32, texture);
             write_img_stdout(&img, DEFAULT_IMG_FORMAT);
         }
         Some(("disp", sub_matches)) => {
@@ -365,14 +456,14 @@ fn main() {
         Some(("objects", sub_matches)) => {
             let bank_num = sub_matches.get_one::<String>("num").expect("required");
             let paths = ObjectPaths::from_base(base_path, bank_num);
-            let objects = ObjectRaw::from_file(&paths.objs0_dat);
-            let points = PointRaw::from_file(&paths.pnts0);
-            let faces = FaceRaw::from_file(&paths.facs0);
+            let objects = ObjectRaw::from_file_vec(&paths.objs0_dat);
+            let points = PointRaw::from_file_vec(&paths.pnts0);
+            let faces = FaceRaw::from_file_vec(&paths.facs0);
+            let shapes = Shape::from_file_vec(&paths.shapes);
             println!("Num objects = {}", objects.len());
             for obj in &objects {
                 println!("  {:?}", obj);
             }
-            let shapes = Shape::from_file(&paths.shapes);
             println!("Num shapes = {}", shapes.len());
             for shape in shapes {
                 println!("  {:?}", shape);
@@ -390,6 +481,59 @@ fn main() {
             let path = sub_matches.get_one::<PathBuf>("pls_path").expect("required");
             let pls_data = decode_pls(path);
             std::io::stdout().write_all(&pls_data).unwrap();
+        }
+        Some(("psfb", sub_matches)) => {
+            let file_path: PathBuf = sub_matches.get_one("path").cloned().unwrap();
+            let palette_path: Option<PathBuf> = sub_matches.get_one("palette").cloned();
+            let info: bool = sub_matches.get_flag("info");
+            let start_num: Option<u32> = sub_matches.get_one("start").copied();
+            let num: Option<u32> = sub_matches.get_one("num").copied();
+            let palette = if let Some(path) = palette_path {
+                let mut file = File::options().read(true).open(path).unwrap();
+                let mut pal = Vec::new();
+                file.read_to_end(&mut pal).unwrap();
+                let mut pal_tup = [(0u8, 0u8, 0u8); 256];
+                for i in 0..255 {
+                    let pi = i * 4;
+                    pal_tup[i] = (pal[pi], pal[pi+1], pal[pi+2]);
+                }
+                Some(pal_tup)
+            } else {
+                None
+            };
+            if let Some(c) = ContainerPSFB::from_file(&file_path) {
+                if info {
+                    println!("PSFB file '{file_path:?}': ");
+                    println!("    size = {:?}", c.size());
+                    println!("    sprites count = {:?}", c.len());
+                    for sprite in c.sprites_info() {
+                        let size = sprite.width as usize * sprite.height as usize;
+                        println!(" Sprite index={:?} offset={:?}/0x{:x}, size={:?}, width={:?}, height={:?}"
+                                 , sprite.index, sprite.offset, sprite.offset, size, sprite.width, sprite.height);
+                    }
+                } else {
+                    match (start_num, num) {
+                        (Some(i), Some(n)) => {
+                            let prefix: PathBuf = sub_matches.get_one("prefix").cloned().unwrap();
+                            draw_sprites_img(&c, i, n, &prefix, &palette);
+                        }
+                        (None, Some(n)) => {
+                            let prefix: PathBuf = sub_matches.get_one("prefix").cloned().unwrap();
+                            draw_sprites_img(&c, 0, n, &prefix, &palette);
+                        }
+                        (Some(i), None) => {
+                            if let Some(image) = c.get_image(i as usize) {
+                                let img = draw_image(image, &palette);
+                                write_dyn_img_stdout(&img, DEFAULT_IMG_FORMAT);
+                            }
+                        }
+                        (None, None) => {
+                            let prefix: PathBuf = sub_matches.get_one("prefix").cloned().unwrap();
+                            draw_sprites_img(&c, 0, c.len() as u32, &prefix, &palette);
+                        }
+                    }
+                }
+            }
         }
         _ => {}
     }
