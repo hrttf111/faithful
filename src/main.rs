@@ -223,6 +223,7 @@ struct LevelUniforms {
     selected_color: GlUniform1Cell<Vector4::<f32>>,
     level_shift: GlUniform1Cell<Vector4::<f32>>,
     height_scale: GlUniform1Cell<f32>,
+    sunlight: GlUniform1Cell<Vector4::<f32>>,
 }
 
 trait LandscapeProgram {
@@ -294,6 +295,7 @@ impl MainLandscapeProgram {
         program.set_uniform(6, uniforms.selected.clone());
         program.set_uniform(7, uniforms.land_step.clone());
         program.set_uniform(8, uniforms.land_width.clone());
+        program.set_uniform(21, uniforms.sunlight.clone());
 
         let program_info = program.get_info().unwrap();
         log::debug!("Program info {}", program_info);
@@ -526,6 +528,16 @@ fn render(gl: &GlCtx, program_landscape: &GlProgram, program_select: &GlProgram,
     scene.model_select.draw(1);
 }
 
+fn parse_light(s: &str) -> Option<(i16, i16)> {
+    let parts: Vec<&str> = s.split(';').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let a = &parts[0];
+    let b = &parts[1];
+    Some((a.parse().unwrap(), b.parse().unwrap()))
+}
+
 struct AppConfig {
     base: Option<PathBuf>,
     level: Option<u8>,
@@ -533,6 +545,7 @@ struct AppConfig {
     cpu: bool,
     cpu_full: bool,
     debug: bool,
+    light: Option<(i16, i16)>,
 }
 
 fn cli() -> Command {
@@ -563,6 +576,10 @@ fn cli() -> Command {
             .long("cpu-full")
             .action(ArgAction::SetTrue)
             .help("Enable full CPU texture rendering"),
+        Arg::new("light")
+            .long("light")
+            .action(ArgAction::Set)
+            .help("Light configuration x;y"),
         Arg::new("debug")
             .long("debug")
             .action(ArgAction::SetTrue)
@@ -582,8 +599,9 @@ fn get_config() -> AppConfig {
     let cpu = matches.get_flag("cpu");
     let cpu_full = matches.get_flag("cpu-full");
     let debug = matches.get_flag("debug");
+    let light = matches.get_one::<String>("light").and_then(|s| parse_light(s));
 
-    AppConfig{base, level, landtype, cpu, cpu_full, debug}
+    AppConfig{base, level, landtype, cpu, cpu_full, debug, light}
 }
 
 fn init_logger(app_config: &AppConfig) {
@@ -637,6 +655,10 @@ fn main() {
         selected_color: GlUniform1::new_rc(Vector4::<f32>::new(1.0, 0.0, 0.0, 0.0)),
         level_shift: GlUniform1::new_rc(landscape_mesh.get_shift_vector()),
         height_scale: GlUniform1::new_rc(landscape_mesh.height_scale()),
+        sunlight: GlUniform1::new_rc({
+            let (x, y) = app_config.light.unwrap_or((0x93, 0x93));
+            Vector4::<f32>::new(x as f32, y as f32, 0x93 as f32, 0.0)
+        }),
     };
 
     let mut heights_buffer = {
@@ -670,9 +692,6 @@ fn main() {
     //
 
     let mut program_container = LandscapeProgramContainer::new();
-    program_container.add_program(MainLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
-    program_container.add_program(GradLandscapeProgram::new_rc_ref(&gl, &uniforms));
-
     if app_config.cpu {
         program_container.add_program(CpuLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
     }
@@ -680,6 +699,9 @@ fn main() {
     if app_config.cpu_full {
         program_container.add_program(CpuFullLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
     }
+    program_container.add_program(MainLandscapeProgram::new_rc_ref(&gl, &level_res.borrow_mut(), &uniforms));
+    program_container.add_program(GradLandscapeProgram::new_rc_ref(&gl, &uniforms));
+
 
     let model_main = make_landscape_mode(&gl, &uniforms, &landscape_mesh);
 
@@ -793,6 +815,15 @@ fn main() {
                     KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::K), .. } => {
                         landscape_mesh.shift_x(-1);
                         uniforms.level_shift.borrow_mut().set(landscape_mesh.get_shift_vector());
+                        do_render = true;
+                    },
+                    KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::Y), .. } => {
+                        let mut sunlight = uniforms.sunlight.borrow_mut();
+                        let mut v = *sunlight.get();
+                        v.x -= 1.0;
+                        v.y -= 1.0;
+                        log::debug!("V = {:?}", v);
+                        sunlight.set(v);
                         do_render = true;
                     },
                     KI { state: ElementState::Pressed, virtual_keycode: Some(key), .. } => {

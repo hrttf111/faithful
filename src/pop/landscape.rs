@@ -86,6 +86,6 @@ pub fn make_texture_land(
                      ) -> Vec<u8> {
     let land_size = 128;
     let params_globe = &level_res.params;
-    let land = LandPos::from_landscape(&level_res.landscape);
+    let land = LandPos::from_landscape_sun(&level_res.landscape);
     texture_land(land_size, &land, params_globe)
 }

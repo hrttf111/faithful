@@ -23,7 +23,7 @@ pub fn texture_minimap(width: usize, flag: bool, land: &[LandPos], bigf0: &[u8])
                         }
                     };
                     let index = {
-                        let index = v*0x100 + (land_pos.c_4 as usize)*0x100;
+                        let index = v*0x100 + (land_pos.brightness as usize)*0x100;
                         if index >= bigf0.len() {
                             bigf0.len() - 1
                         } else {

@@ -12,6 +12,7 @@ layout (location=4) uniform vec4 selectedColor;
 layout (location=6) uniform int selectedFrag;
 
 layout (location=1) in vec3 coord3dIn;
+layout (location=2) in float brightness;
 
 layout(location = 0) out vec4 outColor;
 
@@ -62,7 +63,7 @@ vec3 land_tex(vec3 coord)
 
     int disp_val = get_disp(int(coord.x), int(coord.y)+32);
     int disp_val_2 = get_disp_2(int(coord.x), int(coord.y)+32);
-    int disp_param = int((float(disp_val_2) - float(disp_val)) / 4.0) + 0x80;
+    int disp_param = int((float(disp_val_2) - float(disp_val)) / 4.0) + int(brightness);
     disp_param = clamp(disp_param, 0, 255);
 
     int static_component = int(texelFetch(sla, int(height)).r) * disp_val;
@@ -73,9 +74,6 @@ vec3 land_tex(vec3 coord)
 
     int height_component = int(height * 256) & 0x7fffff00;
     int index = static_component + height_component + disp_param;
-    //int index = static_component + height_component;
-    //int index = disp_param + height_component;
-    //int index = height_component;
 
     uint bigf_index = min(texelFetch(bigf, index).r, 128);
     return mk_tex(bigf_index);

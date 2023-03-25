@@ -16,8 +16,10 @@ layout (binding=9) readonly buffer heights_buffer
 {
     uint heights[];
 };
+layout (location=21) uniform vec4 sunlight;
 
 layout (location=1) out vec3 coord3dOut;
+layout (location=2) out float brightness;
 
 void main(void) {
     vec3 coord3d = vec3(float(coordIn.x) * step, float(coordIn.y) * step, 0.0);
@@ -27,4 +29,20 @@ void main(void) {
     vec4 coord = m_transform * m_transform1 * vec4(coordf, 1.0);
     gl_Position = coord;
     coord3dOut = vec3(coord3d.xy, coordf.z);
+
+    uint index1 = (int(coordIn.y + levelShift.y + 1) % width) * width
+                + (int(coordIn.x + levelShift.x) % width);
+    uint index2 = (int(coordIn.y + levelShift.y) % width) * width
+                + (int(coordIn.x + levelShift.x + 1) % width);
+
+    int sunlight_var_1 = int(sunlight.x);
+    int sunlight_var_2 = int(sunlight.y);
+    int sunlight_var_3 = int(sunlight.z);
+
+    int ch = int(heights[index]);
+    int br_i = sunlight_var_3 +
+               sunlight_var_2 * (int(heights[index1]) - ch) -
+               sunlight_var_1 * (ch - int(heights[index2]));
+    float br_f = float(br_i) / float(0x15e) + float(0x80);
+    brightness = clamp(br_f, 0.0, 255.0);
 }

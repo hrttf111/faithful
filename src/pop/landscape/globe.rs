@@ -12,7 +12,7 @@ fn make_tile<T: LandTile>(params: &GlobeTextureParams
     let height_4 = get_height(pos.p4) as f32;
 
     let c1_inc = LandInc::mk_land_inc8(pos.p1.c_1, pos.p2.c_1, pos.p3.c_1, pos.p4.c_1, n as f32);
-    let c4_inc = LandInc::mk_land_inc8(pos.p1.c_4, pos.p2.c_4, pos.p3.c_4, pos.p4.c_4, n as f32);
+    let brightness_inc = LandInc::mk_land_inc8(pos.p1.brightness, pos.p2.brightness, pos.p3.brightness, pos.p4.brightness, n as f32);
     let height_inc = LandInc::mk_land_inc(height_1, height_2, height_3, height_4, n as f32);
 
     let mut disp: [i8; 64] = [0; 64];
@@ -29,7 +29,7 @@ fn make_tile<T: LandTile>(params: &GlobeTextureParams
             let height_param: i32 = hp as i32;
             let height_param_x256: i32 = height_param * 256;
 
-            let c4_val = c4_inc.inc_line(i, j);
+            let c4_val = brightness_inc.inc_line(i, j);
             let disp_val = disp[i * 8 + j];
             let c4_disp_param = (disp_val as f32 / 4.0 + c4_val) as i32;
             let c4_disp_param = c4_disp_param.clamp(0, 255);

@@ -352,7 +352,7 @@ fn make_texture_land(tex_type: TextureType
 
     let land_size = level_res.landscape.land_size();
     let params_globe = &level_res.params;
-    let land = LandPos::from_landscape(&level_res.landscape);
+    let land = LandPos::from_landscape_sun(&level_res.landscape);
 
     //let (h, v) = tex_move.unwrap_or((0, 0));
 

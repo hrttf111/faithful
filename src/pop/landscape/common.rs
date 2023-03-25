@@ -12,7 +12,7 @@ pub struct LandPos
     pub c_1: u8,
     pub c_2: u8,
     pub c_3: u8,
-    pub c_4: u8,
+    pub brightness: u8,
     pub ph: u8,
     pub ph_2: u8,
     pub land_adj: bool,
@@ -20,7 +20,7 @@ pub struct LandPos
 
 impl LandPos {
     fn default() -> LandPos {
-        LandPos{flags: 0, height: 0, b_2: 0, c: 0, c_1: 0, c_2: 0, c_3: 0, c_4: 0, ph: 0, ph_2: 0, land_adj: false}
+        LandPos{flags: 0, height: 0, b_2: 0, c: 0, c_1: 0, c_2: 0, c_3: 0, brightness: 0, ph: 0, ph_2: 0, land_adj: false}
     }
 
     pub fn from_landscape<const N: usize>(landscape: &Landscape<N>) -> Vec<LandPos> {
@@ -31,9 +31,29 @@ impl LandPos {
             let p = i * N;
             for j in 0..N {
                 v[p+j].c_1 = 0;
-                v[p+j].c_4 = 0x80;
+                v[p+j].brightness = 0x80;
                 v[p+j].height = landscape.height[i][j];
                 v[p+j].land_adj = landscape.is_land_adj(i, j);
+            }
+        }
+        v
+    }
+
+    pub fn from_landscape_sun<const N: usize>(landscape: &Landscape<N>) -> Vec<LandPos> {
+        let sunlight_var_1 = 0x93;
+        let sunlight_var_2 = 0x93;
+        let sunlight_var_3 = 0x93;
+        let mut v = Self::from_landscape(landscape);
+        for i in 0..N {
+            let p = i * N;
+            for j in 0..N {
+                let ch: i32 = landscape.height[i][j] as i32;
+                let h1: i32 = landscape.height[(i+1)%N][j] as i32;
+                let h2: i32 = landscape.height[i][(j+1)%N] as i32;
+                let b = sunlight_var_3 + (h1 - ch) * sunlight_var_2 - (ch - h2) * sunlight_var_1;
+                let b = (b as f64) / (0x15e as f64) + (v[p+j].brightness as f64);
+                let b = b.clamp(0.0, 255.0) as u8;
+                v[p+j].brightness = b;
             }
         }
         v
