@@ -3,7 +3,7 @@
 
 layout (location=10, binding=6) uniform sampler2D tex_full;
 
-layout (location=2) uniform vec4 levelShift;
+layout (location=2) uniform ivec4 levelShift;
 layout (location=4) uniform vec4 selectedColor;
 layout (location=6) uniform int selectedFrag;
 
@@ -13,9 +13,9 @@ layout(location = 0) out vec4 outColor;
 
 float n = 4096.0;
 
-float calc_tex_coord_f(float v, float shift)
+float calc_tex_coord_f(float v, int shift)
 {
-    return (v + shift * (1.0 / 128.0));
+    return (v + float(shift) * (1.0 / 128.0));
 }
 
 void main(void) {

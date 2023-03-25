@@ -4,7 +4,7 @@
 layout (location=10, binding=0) uniform usampler2D tex;
 layout (location=11, binding=1) uniform usampler1D palette;
 
-layout (location=2) uniform vec4 levelShift;
+layout (location=2) uniform ivec4 levelShift;
 layout (location=4) uniform vec4 selectedColor;
 layout (location=6) uniform int selectedFrag;
 
@@ -20,9 +20,9 @@ vec3 mk_tex(uint val)
     return vec3(float(color.r) / 255.0, float(color.g) / 255.0, float(color.b) / 255.0);
 }
 
-int calc_tex_coord(float v, float shift)
+int calc_tex_coord(float v, int shift)
 {
-    return int(v / 8.0 * n + shift * 32.0) % 4096;
+    return int(v / 8.0 * n + float(shift) * 32.0) % 4096;
 }
 
 void main(void) {

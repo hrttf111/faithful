@@ -221,7 +221,7 @@ struct LevelUniforms {
     land_step: GlUniform1Cell<f32>,
     selected: GlUniform1Cell<i32>,
     selected_color: GlUniform1Cell<Vector4::<f32>>,
-    level_shift: GlUniform1Cell<Vector4::<f32>>,
+    level_shift: GlUniform1Cell<Vector4::<i32>>,
     height_scale: GlUniform1Cell<f32>,
     sunlight: GlUniform1Cell<Vector4::<f32>>,
 }

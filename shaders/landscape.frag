@@ -6,7 +6,7 @@ layout (location=11, binding=2) uniform isamplerBuffer disp;
 layout (location=12, binding=3) uniform usamplerBuffer bigf;
 layout (location=13, binding=4) uniform usamplerBuffer sla;
 
-layout (location=2) uniform vec4 levelShift;
+layout (location=2) uniform ivec4 levelShift;
 layout (location=3) uniform float heightScale;
 layout (location=4) uniform vec4 selectedColor;
 layout (location=6) uniform int selectedFrag;
@@ -39,8 +39,8 @@ uint mk_height(float z)
 
 int get_disp(int x, int y)
 {
-    int sx = int(levelShift.x * 32.0);
-    int sy = int(levelShift.y * 32.0);
+    int sx = levelShift.x * 32;
+    int sy = levelShift.y * 32;
     int dx = ((x + sx) % 256) * 256;
     int dy = (y + sy) % 256;
     return texelFetch(disp, dx + dy).r;
@@ -48,8 +48,8 @@ int get_disp(int x, int y)
 
 int get_disp_2(int x, int y)
 {
-    int sx = int(levelShift.x * 32.0);
-    int sy = int(levelShift.y * 32.0);
+    int sx = levelShift.x * 32;
+    int sy = levelShift.y * 32;
     int ly = ((y + sy) % 32); // last line
     int dx = (ly == 31) ? 0 : 1;
     int x1 = ((x + dx + sx) % 256) * 256;

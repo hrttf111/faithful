@@ -144,8 +144,8 @@ impl<const N: usize> LandscapeMesh<N> {
         self.shift_y
     }
 
-    pub fn get_shift_vector(&self) -> Vector4<f32> {
-        Vector4::new(self.shift_x as f32, self.shift_y as f32, 0.0, 0.0)
+    pub fn get_shift_vector(&self) -> Vector4<i32> {
+        Vector4::new(self.shift_x as i32, self.shift_y as i32, 0, 0)
     }
 
     pub fn to_model(&self, m: &mut LandscapeModel) {

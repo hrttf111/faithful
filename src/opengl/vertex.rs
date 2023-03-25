@@ -31,7 +31,7 @@ pub struct GlVao {
 }
 
 fn is_type_int(elem_type: GLenum) -> bool {
-    matches!(elem_type, GL_SHORT|GL_UNSIGNED_SHORT|GL_INT|GL_UNSIGNED_INT)
+    matches!(elem_type, GL_UNSIGNED_BYTE|GL_SHORT|GL_UNSIGNED_SHORT|GL_INT|GL_UNSIGNED_INT)
 }
 
 impl GlVao {

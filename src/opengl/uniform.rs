@@ -68,6 +68,15 @@ impl GlUniform for GlUniform1<Vector4<f32>> {
     }
 }
 
+impl GlUniform for GlUniform1<Vector4<i32>> {
+    fn bind(&self, gl: &GlCtx, index: i32) {
+        unsafe {
+            gl.Uniform4i(index, self.val.x, self.val.y, self.val.z, self.val.w);
+            gl_error_panic(gl, &format!("Uniform4i {:?}", index));
+        }
+    }
+}
+
 impl GlUniform for GlUniform1<Matrix4<f32>> {
     fn bind(&self, gl: &GlCtx, index: i32) {
         unsafe {
