@@ -156,3 +156,56 @@ impl<'a> LandTile for LandTileSlice<'a> {
 }
 
 /******************************************************************************/
+
+pub trait LandTileProvider {
+    type Tile: LandTile;
+
+    fn next_tile(&mut self, i: usize, j: usize) -> &mut Self::Tile;
+}
+
+/******************************************************************************/
+
+pub struct LandTileSliceProvider<'a> {
+    texture: &'a mut[u8],
+    start: usize,
+    line_width: usize,
+    tile_width: usize,
+    tile_h_num: usize,
+}
+
+impl<'a> LandTileSliceProvider<'a> {
+    pub fn new(texture: &'a mut[u8], tile_h_num: usize, tile_width: usize) -> Self {
+        let line_width = tile_h_num * tile_width;
+        Self{texture, start: 0, line_width, tile_width, tile_h_num}
+    }
+}
+
+impl<'a> LandTile for LandTileSliceProvider<'a> {
+    fn tile_width(&self) -> usize {
+        self.tile_width
+    }
+
+    fn set_texel(&mut self, i: usize, j: usize, val: u8) {
+        let index: usize = self.start + self.line_width * i;
+        self.texture[index + j] = val;
+    }
+}
+
+impl<'a> LandTileProvider for LandTileSliceProvider<'a> {
+    type Tile = Self;
+
+    fn next_tile(&mut self, i: usize, j: usize) -> &mut Self::Tile {
+        self.start = i * self.tile_h_num * (self.tile_width * self.tile_width) + j * self.tile_width;
+        self
+    }
+}
+
+/******************************************************************************/
+
+pub trait DispProvider {
+    fn val(&self, i: usize, j: usize) -> i8;
+    fn val_adjacent(&self, i: usize, j: usize) -> f32;
+    fn update(&mut self, disp0: &[i8], pos: &LandPosQuad);
+}
+
+/******************************************************************************/

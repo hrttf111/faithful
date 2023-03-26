@@ -71,30 +71,6 @@ fn draw_texture(pal: &[u8], width: u32, texture: Vec<u8>) -> RgbaImage {
     img.expand_palette(&pal_tup, None)
 }
 
-/*
-fn draw_texture2(pal: &[u8], width: u32, texture: &[u8], tex_width: u32, disp_v: u32, disp_h: u32) -> RgbImage {
-    let mut img = RgbImage::new(width, width);
-    let pixel_size = width / tex_width;
-    for i in 0..tex_width {
-        let pixel_height = i * pixel_size;
-        for j in 0..tex_width {
-            let pixel_width = j * pixel_size;
-            let palette_index = texture[(i*tex_width + j) as usize] as usize;
-            let palette_index = palette_index.min(127) * 4;
-            let buf: &[u8] = &pal[palette_index..=(palette_index+2)];
-            for k1 in 0..pixel_size {
-                for k2 in 0..pixel_size {
-                    let h = (pixel_height + k1 + disp_h) % width;
-                    let v = (pixel_width + k2 + disp_v) % width;
-                    img.put_pixel(h, v, Rgb([buf[0], buf[1], buf[2]]));
-                }
-            }
-        }
-    }
-    img
-}
-*/
-
 fn draw_images(pal: &[u8], sprites: &[Image]) -> RgbImage {
     let (width, height, sprite_width) = {
         let mut width = 0;
