@@ -1,7 +1,6 @@
 use std::io::Read;
-use std::iter::zip;
 
-use crate::pop::types::{BinDeserializer, Image};
+use crate::pop::types::{BinDeserializer, Image, ImageStorage, ImageInfo, ImageStorageSource};
 
 /******************************************************************************/
 
@@ -13,19 +12,14 @@ pub struct SpritePSFB {
 }
 
 impl SpritePSFB {
-    pub fn to_image(&self, data_in: &[u8]) -> Image {
-        let width = self.width as usize;
+    pub fn to_storage<S: ImageStorage>(&self, s: &mut S, data_in: &[u8]) {
         let height = self.height as usize;
-
         let mut source_index = 0;
         let mut height_index = 0;
         while data_in[source_index] == 0 && height_index < height {
             source_index += 1;
             height_index += 1;
         }
-        let size = width * height;
-        let mut data = vec![0u8; size];
-
         while height_index < height {
             let mut dest_index = 0;
             while data_in[source_index] != 0 {
@@ -41,10 +35,7 @@ impl SpritePSFB {
                         let line_end = source_index + val;
                         &data_in[line_start..=line_end]
                     };
-                    let dest_index_start = height_index * width + dest_index;
-                    for (i, v) in zip(dest_index_start.., line) {
-                        data[i] = *v;
-                    }
+                    s.set_line(dest_index, height_index, line);
                     dest_index += val;
                     source_index += val;
                 }
@@ -53,7 +44,16 @@ impl SpritePSFB {
             source_index += 1;
             height_index += 1;
         }
-        Image{width, height, data}
+    }
+}
+
+impl ImageInfo for SpritePSFB {
+    fn width(&self) -> usize {
+        self.width as usize
+    }
+
+    fn height(&self) -> usize {
+        self.height as usize
     }
 }
 
@@ -94,10 +94,23 @@ impl ContainerPSFB {
         &self.sprites
     }
 
+    pub fn get_storage<S: ImageStorageSource>(&self, index: usize, provider: &mut S) -> bool {
+        if let Some(s) = self.sprites.get(index) {
+            let offset = s.offset - self.header_size;
+            if let Some(storage) = provider.get_storage(s) {
+                s.to_storage(storage, &self.data[offset..]);
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn get_image(&self, index: usize) -> Option<Image> {
         if let Some(s) = self.sprites.get(index) {
             let offset = s.offset - self.header_size;
-            return Some(s.to_image(&self.data[offset..]));
+            let mut image = Image::alloc(s.width as usize, s.height as usize);
+            s.to_storage(&mut image, &self.data[offset..]);
+            return Some(image);
         }
         None
     }

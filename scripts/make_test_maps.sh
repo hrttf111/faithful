@@ -22,3 +22,5 @@ for i in $LEVELS; do
     make_map $i "minimap"
     #make_map $i "land"
 done
+
+#cargo run --bin pop_res -- land 2 | feh -

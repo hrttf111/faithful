@@ -1,4 +1,5 @@
 use crate::pop::level::GlobeTextureParams;
+use crate::pop::types::{Image, ImageStorage};
 
 /*
  * Disp memory consists of 256x256 (65k) bytes.
@@ -57,16 +58,16 @@ pub fn texture_disp_quarter(params: &GlobeTextureParams) -> Vec<u8> {
     texture
 }
 
-pub fn texture_bigf0(height: u16, params: &GlobeTextureParams) -> Vec<u8> {
+pub fn texture_bigf0(height: u16, params: &GlobeTextureParams) -> Image {
     let width = 256;
-    let mut texture = vec![0; width * width];
+    let mut img = Image::alloc(width, width);
     for i in 0..width {
         for j in 0..width {
             let height_param_x256: i32 = height as i32 * 256;
-            texture[i*width + j] = params.bigf0[(height_param_x256 + i as i32) as usize];
+            img.set_pixel(j, i, params.bigf0[(height_param_x256 + i as i32) as usize]);
         }
     }
-    texture
+    img
 }
 
 pub fn texture_bigf0_disp(height: u16, disp_div: i8, disp_add: u8, params: &GlobeTextureParams) -> Vec<u8> {

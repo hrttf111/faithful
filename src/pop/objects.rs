@@ -193,7 +193,7 @@ impl Object3D {
     }
 
     pub fn from_file(base: &Path, bank_num: &str) -> Vec<Self> {
-        let paths = ObjectPaths::from_base(base, bank_num);
+        let paths = ObjectPaths::from_default_dir(base, bank_num);
         let objects = ObjectRaw::from_file_vec(&paths.objs0_dat);
         let points = PointRaw::from_file_vec(&paths.pnts0);
         let faces = FaceRaw::from_file_vec(&paths.facs0);

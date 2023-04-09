@@ -22,7 +22,8 @@ use faithful::view::*;
 use faithful::intersect::intersect_iter;
 
 use faithful::landscape::{LandscapeMesh, LandscapeModel};
-use faithful::pop::landscape::{make_texture_land, LevelRes, draw_texture_u8};
+use faithful::pop::level:: LevelRes;
+use faithful::pop::landscape::{make_texture_land, draw_texture_u8};
 
 use faithful::opengl::gl::{GlCtx, new_gl_ctx};
 use faithful::opengl::program::*;

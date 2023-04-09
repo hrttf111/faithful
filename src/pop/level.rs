@@ -34,6 +34,11 @@ impl LevelPaths {
         }
     }
 
+    pub fn from_default_dir(base: &Path, key: &str) -> Self {
+        let data_dir = base.join("data");
+        Self::from_base(&data_dir, key)
+    }
+
     pub fn dat_path(base: &Path, num: u8) -> PathBuf {
         mk_based_path(base, format!("levl2{num:03}.dat"))
     }
@@ -55,15 +60,55 @@ pub struct ObjectPaths {
 impl ObjectPaths {
     pub fn from_base(base: &Path, key: &str) -> Self {
         Self {
-            //objs0_dat: mk_based_path(base, format!("objects/objs0-{key}.dat")),
-            objs0_dat: mk_based_path(base, format!("objects/OBJS0-{key}.DAT")),
-            objs0_ver: mk_based_path(base, format!("objects/objs0-{key}.ver")),
-            pnts0: mk_based_path(base, format!("objects/PNTS0-{key}.DAT")),
-            facs0: mk_based_path(base, format!("objects/FACS0-{key}.DAT")),
-            morph0: mk_based_path(base, format!("objects/morph0-{key}.dat")),
-            shapes: mk_based_path(base, "objects/SHAPES.DAT".to_string()),
+            //objs0_dat: mk_based_path(base, format!("objs0-{key}.dat")),
+            objs0_dat: mk_based_path(base, format!("OBJS0-{key}.DAT")),
+            objs0_ver: mk_based_path(base, format!("objs0-{key}.ver")),
+            pnts0: mk_based_path(base, format!("PNTS0-{key}.DAT")),
+            facs0: mk_based_path(base, format!("FACS0-{key}.DAT")),
+            morph0: mk_based_path(base, format!("morph0-{key}.dat")),
+            shapes: mk_based_path(base, "SHAPES.DAT".to_string()),
         }
     }
+
+    pub fn from_default_dir(base: &Path, key: &str) -> Self {
+        let data_dir = base.join("objects");
+        Self::from_base(&data_dir, key)
+    }
+}
+
+/******************************************************************************/
+
+pub struct LevelRes {
+    pub paths: LevelPaths,
+    pub params: GlobeTextureParams,
+    pub landscape: Landscape<128>,
+}
+
+impl LevelRes {
+    pub fn new(base: &Path, level_num: u8, level_type_opt: Option<&str>) -> LevelRes {
+        let level_dir = base.join("levels");
+        let (level_path, level_type) = read_level(&level_dir, level_num);
+
+        let paths = match level_type_opt {
+            Some(v) => LevelPaths::from_default_dir(base, v),
+            None => LevelPaths::from_default_dir(base, &level_type),
+        };
+
+        let landscape = Landscape::from_file(&level_path);
+        let params = GlobeTextureParams::from_level(&paths);
+        LevelRes {
+            paths,
+            params,
+            landscape,
+        }
+    }
+}
+
+pub fn read_level(base: &Path, num: u8) -> (PathBuf, String) {
+    let dat_path = LevelPaths::dat_path(base, num);
+    let hdr_path = LevelPaths::hdr_path(base, num);
+    let s = read_landscape_type(&hdr_path);
+    (dat_path, s)
 }
 
 /******************************************************************************/

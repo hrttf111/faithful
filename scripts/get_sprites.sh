@@ -1,24 +1,32 @@
 rm -rf ./img
 mkdir ./img
-#DAT=/opt/sandbox/pop/data/hfx0-0.dat
-DAT=/opt/sandbox/pop/data/HSPR0-0.DAT
-#DAT=/opt/sandbox/pop/data/fenew/FEhi33EE.spr
-#DAT=/opt/sandbox/pop/data/EDIT0-0.DAT
-#DAT=/opt/sandbox/pop/data/FONT2-0.DAT
-#DAT=/opt/sandbox/pop/data/fenew/fecursor.spr
-#DAT=/opt/sandbox/pop/data/plspanel.spr
-#DAT=/opt/sandbox/pop/data/POINT0-0.DAT
-#DAT=/opt/sandbox/pop/data/plsspace.spr
-#DAT=/opt/sandbox/pop/data/f00t3-0.dat
-#for i in `seq 0 7952`; do
-#    cargo run --bin pop_res --release -- psfb --path ${DAT} --palette /opt/sandbox/pop/data/pal0-0.dat --num=$i > img/$i.bmp
-#done
-cargo run --bin pop_res --release -- psfb --path ${DAT} --palette /opt/sandbox/pop/data/pal0-0.dat --prefix /opt/projects/faithful/img/hspr0_
-#cargo run --bin pop_res --release -- psfb --path ${DAT} --info
-#cargo run --bin pop_res --release -- psfb --path ${DAT} --palette /opt/sandbox/pop/data/fenew/fepal0.dat --prefix /opt/projects/faithful/img/hspr0_
 
-#cargo run --bin pop_res --release -- psfb --path ${DAT} --palette /opt/sandbox/pop/data/fenew/fepal0.dat --prefix /opt/projects/faithful/img/hspr0_
+EXEC="cargo run --bin pop_res --release -- "
 
-# cargo run --bin pop_res -- psfb --path /opt/sandbox/pop/data/./fenew/felgspen.spr --num=0 | feh --zoom 500 --force-aliasing
+DATA=/opt/sandbox/pop/data
+FE=${DATA}/fenew
+
+MAIN_PAL_FILES="
+hfx0-0.dat
+HSPR0-0.DAT
+EDIT0-0.DAT
+FONT2-0.DAT
+POINT0-0.DAT
+f00t3-0.dat
+"
+MAIN_PAL=/opt/sandbox/pop/data/pal0-0.dat
+
+for file in $MAIN_PAL_FILES; do
+    ${EXEC} psfb --path ${DATA}/${file} --palette ${MAIN_PAL} > img/${file}.bmp
+done
+
+FE_PAL_FILES="
+FEhi33EE.spr
+fecursor.spr
+"
+
+for file in $FE_PAL_FILES; do
+    ${EXEC} psfb --path ${FE}/${file} --palette ${MAIN_PAL} > img/${file}.bmp
+done
+
 # cargo run --bin pop_res -- psfb --path /opt/sandbox/pop/data/./fenew/felgspen.spr --palette /opt/sandbox/pop/data/fenew/fepal0.dat --num=0 | feh --zoom 500 --force-aliasing
-#--palette /opt/sandbox/pop/data/pal0-0.dat

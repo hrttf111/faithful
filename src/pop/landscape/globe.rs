@@ -1,51 +1,53 @@
 use crate::pop::level::GlobeTextureParams;
-use crate::pop::landscape::common::{LandPos, LandPosQuad, LandTileProvider, LandTileSliceProvider, DispProvider};
-use crate::pop::landscape::land::make_land_image;
+use crate::pop::types::{ImageTileSource, Image, TiledComposer, ImageSourceComposed};
+use crate::pop::landscape::common::{LandPosQuad, LandscapeFull, DispProvider};
+use crate::pop::landscape::land::render_landscape;
 
-struct DispProvider8 {
-    disp: [i8; 64],
+struct DispProvider8<'a> {
+    x: usize,
+    y: usize,
+    disp: &'a [i8],
 }
 
-impl DispProvider8 {
-    pub fn new() -> Self {
-        Self{disp: [0i8; 64]}
+impl<'a> DispProvider8<'a> {
+    pub fn new(disp: &'a [i8]) -> Self {
+        Self{x: 0, y: 0, disp}
     }
 }
 
-impl DispProvider for DispProvider8 {
+impl<'a> DispProvider for DispProvider8<'a> {
     fn val(&self, i: usize, j: usize) -> i8 {
-        self.disp[i * 8 + j]
+        let disp_index: usize = ((self.x as usize & 0x7) << 13) + ((self.y as usize & 0x7) << 5) + i*4;
+        self.disp[disp_index + ((j as usize) << 10)]
     }
 
     fn val_adjacent(&self, i: usize, j: usize) -> f32 {
         self.val(i, j) as f32
     }
 
-    fn update(&mut self, disp0: &[i8], pos: &LandPosQuad) {
-        let n = 8;
-        for i in 0..n {
-            let disp_index: usize = ((pos.x as usize & 0x7) << 13) + ((pos.y as usize & 0x7) << 5) + i*4;
-            for j in 0..n {
-                self.disp[i * 8 + j] = disp0[disp_index + ((j as usize) << 10)];
-            }
-        }
+    fn update(&mut self, _disp0: &[i8], pos: &LandPosQuad) {
+        self.x = pos.x as usize;
+        self.y = pos.y as usize;
     }
 }
 
-pub fn texture_globe_provider<'a, P>(width: usize
-                                     , land: &[LandPos]
+pub fn texture_globe_provider<'a, P>(land: &LandscapeFull
                                      , params: &GlobeTextureParams
-                                     , tile_provider: &'a mut P)
-where P: LandTileProvider {
-    let mut disp = DispProvider8::new();
-    make_land_image(width, land, params, &mut disp, tile_provider);
+                                     , tile_source: &'a mut P)
+where P: ImageTileSource {
+    let mut disp = DispProvider8::new(&params.disp0);
+    render_landscape(&mut land.iter_quad(), params, &mut disp, tile_source);
 }
 
 pub fn texture_globe(width: usize
-                     , land: &[LandPos]
-                     , params: &GlobeTextureParams) -> Vec<u8> {
-    let mut texture = vec![0; (8 * 8) * width * width];
-    let mut provider = LandTileSliceProvider::new(&mut texture, width, 8);
-    texture_globe_provider(width, land, params, &mut provider);
-    texture
+                     , land: &LandscapeFull
+                     , params: &GlobeTextureParams) -> Image {
+    let mut tile_source = {
+        let n = 8;
+        let image = Image::alloc(width * n, width * n);
+        let composer = TiledComposer::new(width * n, width * n, n, n);
+        ImageSourceComposed::new(composer, image)
+    };
+    texture_globe_provider(land, params, &mut tile_source);
+    tile_source.get_image()
 }

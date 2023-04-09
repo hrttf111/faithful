@@ -1,4 +1,5 @@
 use crate::pop::level::GlobeTextureParams;
+use crate::pop::types::{Image, ImageStorage};
 
 /*
  * Bigf0 contains land and water textures. The texture is 3 dimensional.
@@ -11,9 +12,9 @@ use crate::pop::level::GlobeTextureParams;
  *  height * 256 + disp0[position]
  * Without displacement resulting texture is very plain and unnatural.
  */
-pub fn texture_water(offset_counter: usize, params: &GlobeTextureParams) -> Vec<u8> {
+pub fn texture_water(offset_counter: usize, params: &GlobeTextureParams) -> Image {
     let width = 256;
-    let mut texture = vec![0; width * width];
+    let mut img = Image::alloc(width, width);
     for i in 0..width {
         for j in 0..width {
             let offset_param = ((offset_counter + i) & 0xff) * 0x100;
@@ -25,8 +26,8 @@ pub fn texture_water(offset_counter: usize, params: &GlobeTextureParams) -> Vec<
                 std::mem::transmute::<u32, i32>(k) >> 2
             };
             let index = (0x4b80 + disp_val) as usize;
-            texture[i*width + j] = params.bigf0[index];
+            img.set_pixel(j, i, params.bigf0[index]);
         }
     }
-    texture
+    img
 }

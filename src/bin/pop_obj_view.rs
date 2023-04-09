@@ -19,7 +19,7 @@ use faithful::view::*;
 
 use faithful::pop::level::{LevelPaths, GlobeTextureParams};
 use faithful::pop::objects::{Object3D, Vertex};
-use faithful::pop::bl320::make_bl320_tex;
+use faithful::pop::bl320::make_bl320_texture_rgba;
 
 use faithful::opengl::gl::{GlCtx, new_gl_ctx};
 use faithful::opengl::program::*;
@@ -153,7 +153,7 @@ fn main() {
     program_objects.use_program();
 
     let _bl320_tex = {
-        let (width, height, bl320_tex) = make_bl320_tex(&level_paths.bl320, &params.palette);
+        let (width, height, bl320_tex) = make_bl320_texture_rgba(&level_paths.bl320, &params.palette);
         log::debug!("Texture {width:?}/{height:?}");
         {
             let params = TextureParams{target: GL_TEXTURE_2D, internal_format: GL_RGBA32F, format: GL_RGBA, data_type: GL_UNSIGNED_BYTE, nearest: false};
