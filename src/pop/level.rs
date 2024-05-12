@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{Read, Seek};
+
+use crate::pop::types::BinDeserializer;
+use crate::pop::units::{UnitRaw, TribeConfigRaw};
 
 /******************************************************************************/
 
@@ -78,10 +81,34 @@ impl ObjectPaths {
 
 /******************************************************************************/
 
+#[derive(Debug, Copy, Clone)]
+pub struct Sunlight {
+    pub v1: u8,
+    pub v2: u8,
+    pub v3: u8,
+}
+
+impl Sunlight {
+    pub fn new(v1: u8, v2: u8, v3: u8) -> Self {
+        Sunlight {v1, v2, v3}
+    }
+
+    pub fn from_reader<R: Read>(reader: &mut R) -> Self {
+        let mut buf = [0u8; 3];
+        reader.read_exact(&mut buf).unwrap();
+        Self::new(buf[0], buf[1], buf[2])
+    }
+}
+
+/******************************************************************************/
+
 pub struct LevelRes {
     pub paths: LevelPaths,
     pub params: GlobeTextureParams,
     pub landscape: Landscape<128>,
+    pub tribes: Vec<TribeConfigRaw>,
+    pub sunlight: Sunlight,
+    pub units: Vec<UnitRaw>,
 }
 
 impl LevelRes {
@@ -94,12 +121,32 @@ impl LevelRes {
             None => LevelPaths::from_default_dir(base, &level_type),
         };
 
-        let landscape = Landscape::from_file(&level_path);
+        let mut file = File::options().read(true).open(&level_path).unwrap();
+        let landscape = Landscape::from_reader(&mut file);
+        file.seek(std::io::SeekFrom::Start(0x8000)).unwrap();
+        //read 0x4000
+        file.seek(std::io::SeekFrom::Current(0x4000)).unwrap();
+        //read 0x4000
+        file.seek(std::io::SeekFrom::Current(0x4000)).unwrap();
+        //read 0x4000 (land flags)
+        file.seek(std::io::SeekFrom::Current(0x4000)).unwrap();
+        let mut tribes = Vec::new();
+        for _ in 0..4 {
+            tribes.push(TribeConfigRaw::from_reader(&mut file).unwrap());
+        }
+        let sunlight = Sunlight::from_reader(&mut file);
+        //read units (up to 5500 * 100)
+        let units = UnitRaw::from_reader_vec(&mut file);
+        //read 0x96
+        file.seek(std::io::SeekFrom::Current(0x96)).unwrap();
         let params = GlobeTextureParams::from_level(&paths);
         LevelRes {
             paths,
             params,
             landscape,
+            tribes,
+            sunlight,
+            units,
         }
     }
 }
@@ -244,11 +291,10 @@ impl<const N: usize> Landscape<N> {
         }
     }
 
-    pub fn from_file(path: &Path) -> Self {
-        let mut file = File::options().read(true).open(path).unwrap();
+    pub fn from_reader<R: Read>(reader: &mut R) -> Self {
         let mut s = Self::new();
         let mut buf = Vec::new();
-        let _file_size = file.read_to_end(&mut buf);
+        let _file_size = reader.read_to_end(&mut buf);
         for (i, n) in (0..).zip(buf.chunks(2).take(N*N)) {
             if n.len() == 2 {
                 let val = u16::from_le_bytes([n[0], n[1]]);
@@ -257,6 +303,11 @@ impl<const N: usize> Landscape<N> {
         }
         s.flip();
         s
+    }
+
+    pub fn from_file(path: &Path) -> Self {
+        let mut file = File::options().read(true).open(path).unwrap();
+        Self::from_reader(&mut file)
     }
 
     pub fn is_land_adj(&self, i: usize, j: usize) -> bool {

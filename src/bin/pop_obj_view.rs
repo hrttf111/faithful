@@ -91,7 +91,7 @@ fn cli() -> Command {
             .long("obj_num")
             .action(ArgAction::Set)
             .value_name("OBJ")
-            .value_parser(clap::value_parser!(u8).range(0..255))
+            .value_parser(clap::value_parser!(u16).range(0..16000))
             .help("Obj number"),
     ];
     Command::new("pop-obj-view")
@@ -108,7 +108,7 @@ fn main() {
     };
     let landtype = matches.get_one("landtype").cloned().unwrap_or_else(|| "1".to_string());
     let debug = matches.get_flag("debug");
-    let obj_num: Option<u8> = matches.get_one("obj_num").copied();
+    let obj_num: Option<u16> = matches.get_one("obj_num").copied();
 
     let log_level: &str = if debug {
         "debug"

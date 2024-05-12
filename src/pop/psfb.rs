@@ -4,6 +4,7 @@ use crate::pop::types::{BinDeserializer, Image, ImageStorage, ImageInfo, ImageSt
 
 /******************************************************************************/
 
+#[derive(Copy, Clone)]
 pub struct SpritePSFB {
     pub index: usize,
     pub offset: usize,
@@ -92,6 +93,10 @@ impl ContainerPSFB {
 
     pub fn sprites_info(&self) -> &[SpritePSFB] {
         &self.sprites
+    }
+
+    pub fn get_info(&self, index: usize) -> Option<SpritePSFB> {
+        self.sprites.get(index).cloned()
     }
 
     pub fn get_storage<S: ImageStorageSource>(&self, index: usize, provider: &mut S) -> bool {

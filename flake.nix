@@ -13,6 +13,7 @@
             shaderc
             shaderc.bin
             clippy
+            imagemagick
         ] ++ p.buildInputs;
         APPEND_LIBRARY_PATH = with pkgs; lib.strings.makeLibraryPath [
           vulkan-loader
@@ -26,7 +27,7 @@
           echo ${pkgs.gdb}
           echo ${pkgs.clippy}
           export RUST_BACKTRACE=1
-          export PATH="$PATH:${pkgs.shaderc.bin}/bin:${pkgs.gdb}/bin:${pkgs.clippy}/bin"
+          export PATH="$PATH:${pkgs.shaderc.bin}/bin:${pkgs.gdb}/bin:${pkgs.clippy}/bin:${pkgs.imagemagick}/bin"
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$APPEND_LIBRARY_PATH"
           export WINIT_UNIX_BACKEND=x11
         '';

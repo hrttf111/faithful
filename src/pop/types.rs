@@ -55,11 +55,50 @@ pub trait ImageInfo {
     fn height(&self) -> usize;
 }
 
+pub trait ImagePos {
+    fn pos_x(&self) -> isize;
+    fn pos_y(&self) -> isize;
+}
+
+impl<'a, T> ImageInfo for &'a T where T: ImageInfo {
+    fn width(&self) -> usize {
+        (*self).width()
+    }
+
+    fn height(&self) -> usize {
+        (*self).height()
+    }
+}
+
+impl<'a, T> ImageInfo for &'a mut T where T: ImageInfo {
+    #[allow(unconditional_recursion)]
+    fn width(&self) -> usize {
+        (*self).width()
+    }
+
+    #[allow(unconditional_recursion)]
+    fn height(&self) -> usize {
+        (*self).height()
+    }
+}
+
 pub trait ImageStorage : ImageInfo {
     //x - width, y - height
     fn set_pixel(&mut self, x: usize, y: usize, val: u8);
     fn set_line(&mut self, x: usize, y: usize, data: &[u8]);
     fn set_image(&mut self, data: &[u8]);
+}
+
+impl<'a, T> ImageStorage for &'a mut T where T: ImageStorage {
+    fn set_pixel(&mut self, x: usize, y: usize, val: u8) {
+        (*self).set_pixel(x, y, val)
+    }
+    fn set_line(&mut self, x: usize, y: usize, data: &[u8]) {
+        (*self).set_line(x, y, data)
+    }
+    fn set_image(&mut self, data: &[u8]) {
+        (*self).set_image(data)
+    }
 }
 
 pub trait ImageAllocator<T> {
@@ -82,6 +121,57 @@ pub trait AllocatorEqual<T> {
 
 pub trait AllocatorIter<T> {
     fn alloc_iter<'a, I: ImageInfo + 'a, R: Iterator<Item=&'a I>>(&'a self, iter: &mut R) -> T;
+}
+
+/******************************************************************************/
+
+pub struct ImageArea {
+    width: usize,
+    height: usize,
+    x: isize,
+    y: isize,
+}
+
+impl ImageArea {
+    pub fn new(width: usize, height: usize, x: isize, y: isize) -> Self {
+        Self{width, height, x, y}
+    }
+
+    pub fn from_image<I: ImageInfo>(i: &I, x: isize, y: isize) -> Self {
+        Self{width: i.width(), height: i.height(), x, y}
+    }
+
+    pub fn from_pos<I: ImagePos>(i: &I, width: usize, height: usize) -> Self {
+        Self{width, height, x: i.pos_x(), y: i.pos_y()}
+    }
+
+    pub fn from_image_and_pos<I: ImageInfo, P: ImagePos>(i: &I, p: &P) -> Self {
+        Self{width: i.width(), height: i.height(), x: p.pos_x(), y: p.pos_y()}
+    }
+
+    pub fn from_image_pos<I: ImageInfo + ImagePos>(i: &I) -> Self {
+        Self{width: i.width(), height: i.height(), x: i.pos_x(), y: i.pos_y()}
+    }
+}
+
+impl ImageInfo for ImageArea {
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+}
+
+impl ImagePos for ImageArea {
+    fn pos_x(&self) -> isize {
+        self.x
+    }
+
+    fn pos_y(&self) -> isize {
+        self.y
+    }
 }
 
 /******************************************************************************/
@@ -319,6 +409,146 @@ impl ImageInfo for ImageComposer2D {
 
 /******************************************************************************/
 
+impl ImagePos for (isize, isize) {
+    fn pos_x(&self) -> isize {
+        self.0
+    }
+
+    fn pos_y(&self) -> isize {
+        self.1
+    }
+}
+
+pub trait LayerComposer {
+    type ComposerResult: ImageInfo;
+
+    fn compose_layers<'a, I: ImagePos + ImageInfo + 'a, R: Iterator<Item=&'a I>>(&'a self, iter: &mut R) -> Self::ComposerResult;
+    fn get_start<'a, I: ImagePos + ImageInfo + 'a>(&'a self, cr: &Self::ComposerResult, img: &I) -> (isize, isize);
+}
+
+pub struct ULCentreComposer {
+    pub vertical: usize,
+    pub horizontal: usize,
+}
+
+impl LayerComposer for ULCentreComposer {
+    type ComposerResult = ImageArea;
+
+    fn compose_layers<'a, I: ImagePos + ImageInfo + 'a, R: Iterator<Item=&'a I>>(&'a self, iter: &mut R) -> Self::ComposerResult {
+        let mut left: isize = 0;
+        let mut right: isize = 0;
+        let mut up: isize = 0;
+        let mut down: isize = 0;
+
+        for image in iter {
+            left = std::cmp::min(left, image.pos_x());
+            right = std::cmp::max(right, image.width() as isize + image.pos_x());
+            up = std::cmp::min(up, image.pos_y());
+            down = std::cmp::max(down, image.height() as isize + image.pos_y());
+        }
+        if right < 0 || right < left {
+            panic!("Right {:?} |= {:?}", right, left);
+        }
+        if down < 0 || down < up {
+            panic!("Down {:?} |= {:?}", down, up);
+        }
+        let x = -left + self.horizontal as isize;
+        let y = -up + self.vertical as isize;
+        let width = (right - left) as usize + self.horizontal*2;
+        let height = (down - up) as usize + self.vertical*2;
+        ImageArea::new(width, height, x, y)
+    }
+
+    fn get_start<'a, I: ImagePos + ImageInfo + 'a>(&'a self, cr: &Self::ComposerResult, img: &I) -> (isize, isize) {
+        (cr.x + img.pos_x(), cr.y + img.pos_y())
+    }
+}
+
+pub struct URCentreComposer {
+    pub vertical: usize,
+    pub horizontal: usize,
+}
+
+impl LayerComposer for URCentreComposer {
+    type ComposerResult = ImageArea;
+
+    fn compose_layers<'a, I: ImagePos + ImageInfo + 'a, R: Iterator<Item=&'a I>>(&'a self, iter: &mut R) -> Self::ComposerResult {
+        let mut left: isize = 0;
+        let mut right: isize = -100;
+        let mut up: isize = 0;
+        let mut down: isize = 0;
+
+        for image in iter {
+            left = std::cmp::min(left, image.pos_x() - image.width() as isize);
+            right = std::cmp::max(right, image.pos_x());
+            up = std::cmp::min(up, image.pos_y());
+            down = std::cmp::max(down, image.height() as isize + image.pos_y());
+        }
+        if right < left {
+            //panic!("Right {:?} |= {:?}", right, left);
+            right = left;
+        }
+        if down < 0 || down < up {
+            panic!("Down {:?} |= {:?}", down, up);
+        }
+        let x = -left + self.horizontal as isize;
+        let y = -up + self.vertical as isize;
+        let width = (right - left) as usize + self.horizontal*2;
+        let height = (down - up) as usize + self.vertical*2;
+        ImageArea::new(width, height, x, y)
+    }
+
+    fn get_start<'a, I: ImagePos + ImageInfo + 'a>(&'a self, cr: &Self::ComposerResult, img: &I) -> (isize, isize) {
+        (cr.x + img.pos_x() - img.width() as isize, cr.y + img.pos_y())
+    }
+}
+
+pub struct LayeredStorageSource<'a, II, IMM, C> {
+    area: ImageArea,
+    img_iter: II,
+    img: IMM,
+    last_cords: (isize, isize),
+    composer: &'a C,
+}
+
+impl<'a, II, M, M1, C> LayeredStorageSource<'a, II, ImageTile<&'a mut M1>, C>
+    where
+        M: ImagePos,
+        II: 'a + Iterator<Item=M>,
+        M1: 'a + ImageInfo + ImageStorage,
+        C: 'a + LayerComposer {
+
+    pub fn new<CS>(storage: &'a mut CS, area: ImageArea, imgs: II, composer: &'a C) -> Self
+        where
+            CS: ImageStorageSource<StorageType=M1> {
+        let img = ImageTile::new(storage.get_storage(&area).unwrap());
+        Self{area, img_iter: imgs, img, last_cords: (0, 0), composer}
+    }
+}
+
+impl<'a, II, M, M1, C> ImageStorageSource for LayeredStorageSource<'a, II, ImageTile<&'a mut M1>, C>
+    where
+        M: ImagePos,
+        II: 'a + Iterator<Item=M>,
+        M1: 'a + ImageInfo + ImageStorage,
+        C: 'a + LayerComposer<ComposerResult=ImageArea> {
+    type StorageType = ImageTile<&'a mut M1>;
+
+    fn get_storage<I: ImageInfo>(&mut self, info: &I) -> Option<&mut Self::StorageType> {
+        if let Some(i) = self.img_iter.next() {
+            self.img.move_tile(-self.last_cords.0, -self.last_cords.1);
+            let composed_image = ImageArea::from_image_and_pos(&info, &i);
+            self.last_cords = self.composer.get_start(&self.area, &composed_image);
+            self.img.move_tile(self.last_cords.0, self.last_cords.1);
+            Some(&mut self.img)
+        } else {
+            None
+        }
+    }
+}
+
+/******************************************************************************/
+
 pub struct ImageTile<I> {
     image: I,
     start_x: usize,
@@ -334,6 +564,11 @@ impl<I> ImageTile<I> {
 
     fn get_image(self) -> I {
         self.image
+    }
+
+    fn move_tile(&mut self, start_x: isize, start_y: isize) {
+        self.start_x = (self.start_x as isize + start_x) as usize;
+        self.start_y = (self.start_y as isize + start_y) as usize;
     }
 }
 

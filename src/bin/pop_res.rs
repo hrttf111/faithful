@@ -2,6 +2,7 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Read;
+use std::collections::HashSet;
 
 use image::{RgbImage, RgbaImage, Rgb, GrayImage, ImageFormat, ImageOutputFormat, ImageBuffer, DynamicImage};
 use clap::{arg, Arg, ArgAction, Command};
@@ -16,14 +17,19 @@ use faithful::pop::landscape::disp::texture_bigf0;
 use faithful::pop::landscape::water::texture_water;
 use faithful::pop::pls::decode;
 use faithful::pop::bl320::{read_bl320, read_bl160};
-use faithful::pop::types::{BinDeserializer, Image, AllocatorIter};
+use faithful::pop::types::{BinDeserializer, Image, AllocatorIter, ULCentreComposer, URCentreComposer, LayeredStorageSource, LayerComposer};
+use faithful::pop::types::{ImageInfo, ImageArea};
 use faithful::pop::types::{image_allocator_1d_horizontal, image_allocator_1d_vertical, image_allocator_2d};
 use faithful::pop::objects::{ObjectRaw, Shape, PointRaw, FaceRaw};
+use faithful::pop::animation::{AnimationsData, AnimationSequence, AnimationFrame};
 
 /******************************************************************************/
 
 const DEFAULT_IMG_FORMAT: ImageOutputFormat = ImageOutputFormat::Bmp;
 const DEFAULT_BASE_PATH: &str = "/opt/sandbox/pop";
+
+type PaletteArray = [(u8, u8, u8); 256];
+type FramesSet = HashSet<usize>;
 
 fn draw_palette(pal: &[u8], width: u32, height: u32, num_colors: u32) -> RgbImage {
     let mut img = RgbImage::new(width, height);
@@ -68,7 +74,7 @@ fn decode_pls(pls_path: &Path) -> Vec<u8> {
 }
 
 #[allow(clippy::needless_range_loop)]
-fn seq_to_pal(pal: &[u8]) -> [(u8, u8, u8); 256] {
+fn seq_to_pal(pal: &[u8]) -> PaletteArray {
     let mut pal_tup = [(0u8, 0u8, 0u8); 256];
     for i in 0..255 {
         let pi = i * 4;
@@ -89,7 +95,7 @@ fn draw_image_pal(pal: &[u8], image: Image) -> RgbaImage {
     img.expand_palette(&pal_tup, None)
 }
 
-fn draw_image(palette: &Option<[(u8, u8, u8); 256]>, img: Image) -> DynamicImage {
+fn draw_image(palette: &Option<PaletteArray>, img: Image) -> DynamicImage {
     let img = image_to_gray(img);
     if let Some(p) = palette {
         return DynamicImage::ImageRgba8(img.expand_palette(p, None));
@@ -97,7 +103,7 @@ fn draw_image(palette: &Option<[(u8, u8, u8); 256]>, img: Image) -> DynamicImage
     DynamicImage::ImageLuma8(img)
 }
 
-fn draw_sprites(psfb: &ContainerPSFB, start: usize, num: usize, prefix: &Path, palette: &Option<[(u8, u8, u8); 256]>) {
+fn draw_sprites(psfb: &ContainerPSFB, start: usize, num: usize, prefix: &Path, palette: &Option<PaletteArray>) {
     if start >= num {
         return;
     }
@@ -112,11 +118,60 @@ fn draw_sprites(psfb: &ContainerPSFB, start: usize, num: usize, prefix: &Path, p
     }
 }
 
-fn draw_sprites_img(psfb: &ContainerPSFB, start: usize, num: usize, palette: &Option<[(u8, u8, u8); 256]>) -> DynamicImage {
+fn draw_sprites_img(psfb: &ContainerPSFB, start: usize, num: usize, palette: &Option<PaletteArray>) -> DynamicImage {
     let allocator = image_allocator_2d(1500);
     let mut p = allocator.alloc_iter(&mut psfb.sprites_info().iter());
     for i in start..(start+num) {
         psfb.get_storage(i as usize, &mut p);
+    }
+    let image = p.get_image();
+    draw_image(palette, image)
+}
+
+struct AnimationsConfig {
+    img_size: usize,
+    with_tribe: bool,
+    with_type: bool,
+}
+
+fn draw_anim_frames<L>(anim_seq: &Vec<AnimationSequence>
+                      , psfb: &ContainerPSFB
+                      , palette: &Option<PaletteArray>
+                      , frames_set: &FramesSet
+                      , composer: &L
+                      , config: &AnimationsConfig
+                      ) -> DynamicImage
+    where L: LayerComposer<ComposerResult=ImageArea> {
+    let allocator = image_allocator_2d(config.img_size);
+    let frames = {
+        let seq = AnimationSequence::get_frames(anim_seq);
+        if !frames_set.is_empty() {
+            seq.into_iter().filter(|f| frames_set.contains(&f.index)).collect::<Vec<AnimationFrame>>()
+        } else {
+            seq
+        }
+    };
+    let composed_sprites: Vec<L::ComposerResult> = frames.iter().flat_map(|frame| {
+        frame.get_permutations(config.with_tribe, config.with_type).into_iter().map(|sprites_seq| {
+            let v = sprites_seq.into_iter().filter_map(|sprite| {
+                psfb.get_info(sprite.sprite_index).map(|im| {
+                    ImageArea::from_image(&im, sprite.coord_x as isize, sprite.coord_y as isize)
+                })
+            }).collect::<Vec<ImageArea>>();
+            composer.compose_layers(&mut v.iter())
+        }).collect::<Vec<L::ComposerResult>>()
+    }).collect();
+    let mut p = allocator.alloc_iter(&mut composed_sprites.iter());
+    let mut cs_iter = composed_sprites.iter();
+    for frame in &frames {
+        let pr = frame.get_permutations(config.with_tribe, config.with_type);
+        for (elems, i) in pr.into_iter().zip(&mut cs_iter) {
+            let img_area = ImageArea::from_image_pos(i);
+            let mut ulc = LayeredStorageSource::new(&mut p, img_area, elems.iter().map(|im| (im.coord_x as isize, im.coord_y as isize)), composer);
+            for elem in &elems {
+                psfb.get_storage(elem.sprite_index, &mut ulc);
+            }
+        }
     }
     let image = p.get_image();
     draw_image(palette, image)
@@ -225,6 +280,63 @@ fn cli() -> Command {
                 .about("Objects commands")
                 .arg(arg!(<num> "Bank num"))
                 .arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("units")
+                .about("Units commands")
+                .arg(arg!(<num> "Level number"))
+                .args(&args)
+                .arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("anims")
+                .about("Animations commands")
+                .args([
+                    Arg::new("psfb_path")
+                        .long("psfb_path")
+                        .action(ArgAction::Set)
+                        .value_name("FILE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to PSFB file"),
+                ]).arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("anims_draw")
+                .about("Animations commands")
+                .args([
+                    Arg::new("path")
+                        .long("path")
+                        .action(ArgAction::Set)
+                        .value_name("FILE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to PSFB file"),
+                    Arg::new("palette")
+                        .long("palette")
+                        .action(ArgAction::Set)
+                        .value_name("PALETTE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to palette file"),
+                    Arg::new("composer")
+                        .long("composer")
+                        .action(ArgAction::Set)
+                        .value_name("COMPOSER")
+                        .value_parser(clap::builder::StringValueParser::new())
+                        .help("Composer type"),
+                    Arg::new("ids")
+                        .long("ids")
+                        .action(ArgAction::Set)
+                        .value_name("IDS")
+                        .value_parser(clap::builder::StringValueParser::new())
+                        .help("Frames ids"),
+                    Arg::new("no_tribe")
+                        .long("no_tribe")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not show tribe images"),
+                    Arg::new("no_type")
+                        .long("no_type")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not show type images"),
+                ]).arg_required_else_help(true),
         )
         .subcommand(
             Command::new("pls")
@@ -341,6 +453,10 @@ fn parse_move(s: &str) -> Option<(u32, u32)> {
     Some((a.parse().unwrap(), b.parse().unwrap()))
 }
 
+fn parse_ids(s: &str) -> HashSet<usize> {
+    HashSet::from_iter(s.split(',').map(|s| s.parse::<usize>().unwrap()))
+}
+
 fn main() {
     let base_path = Path::new(DEFAULT_BASE_PATH);
 
@@ -433,6 +549,98 @@ fn main() {
             println!("Num faces = {}", faces.len());
             for face in &faces {
                 println!("  {:?}", face);
+            }
+        }
+        Some(("units", sub_matches)) => {
+            let level_num = sub_matches.get_one::<String>("num").expect("required").parse().unwrap();
+            let level_res = LevelRes::new(base_path, level_num, None);
+            println!("Num units = {}", level_res.units.len());
+            for unit in &level_res.units {
+                if unit.unit_class != 0 {
+                    println!("  {:?}", unit);
+                }
+            }
+            for tribe in &level_res.tribes {
+                println!("  {:?}", tribe);
+            }
+            println!("  {:?}", level_res.sunlight);
+        }
+        Some(("anims", sub_matches)) => {
+            let psfb_path = sub_matches.get_one::<PathBuf>("psfb_path");
+            println!("PSFB = {:?}", psfb_path);
+            let psfb_container = psfb_path.and_then(|p| ContainerPSFB::from_file(Path::new(&p)));
+            let anims_data = AnimationsData::from_path(&base_path.join("data"));
+            println!("Num vele={:?}, vfra={:?}, vstart={:?}"
+                    , anims_data.vele.len(), anims_data.vfra.len(), anims_data.vstart.len());
+            for (index, vele) in (0..).zip(&anims_data.vele) {
+                println!("  {:?}:{:?}", index, vele);
+            }
+            for (index, vfra) in (0..).zip(&anims_data.vfra) {
+                println!("  {:?}:{:?}", index, vfra);
+            }
+            for vstart in &anims_data.vstart {
+                println!("  {:?}", vstart);
+            }
+            let anim_seq_vec = AnimationSequence::from_data(&anims_data);
+            for anim_seq in &anim_seq_vec {
+                println!("AnimationSequence {:?} ({:?})", anim_seq.index, anim_seq.frames.len());
+                for anim_frame in &anim_seq.frames {
+                    println!("  AnimationFrame {:?} ({:?}, {:?})", anim_frame.index, anim_frame.width, anim_frame.height);
+                    for anim_sprite in &anim_frame.sprites {
+                        println!("    AnimationElement {:?} ({:?}, {:?}, tribe={:?}, flags=0x{:x}, uvar5=0x{:x}, original_flags=0x{:x})"
+                                , anim_sprite.sprite_index
+                                , anim_sprite.coord_x
+                                , anim_sprite.coord_y
+                                , anim_sprite.tribe
+                                , anim_sprite.flags
+                                , anim_sprite.uvar5
+                                , anim_sprite.original_flags);
+                        if let Some(sprite) = psfb_container.as_ref().and_then(|p| p.get_info(anim_sprite.sprite_index)) {
+                            let fit = (anim_frame.width >= sprite.width()) && (anim_frame.height >= sprite.height());
+                            let fit32 = (32 >= sprite.width()) && (32 >= sprite.height());
+                            println!("     Sprite({:?}, {:?}, fit={:?}, fit32={:?})", sprite.width(), sprite.height(), fit, fit32);
+                        }
+                    }
+                }
+            }
+        }
+        Some(("anims_draw", sub_matches)) => {
+            let anims_data = AnimationsData::from_path(&base_path.join("data"));
+            let anim_seq_vec = AnimationSequence::from_data(&anims_data);
+            let file_path: PathBuf = sub_matches.get_one("path").cloned().unwrap();
+            let palette_path: Option<PathBuf> = sub_matches.get_one("palette").cloned();
+            let s = String::from("ul");
+            let composer_type = {
+                sub_matches.get_one::<String>("composer").unwrap_or(&s)
+            };
+            let palette = if let Some(path) = palette_path {
+                let mut file = File::options().read(true).open(path).unwrap();
+                let mut pal = Vec::new();
+                file.read_to_end(&mut pal).unwrap();
+                let pal_tup = seq_to_pal(&pal);
+                Some(pal_tup)
+            } else {
+                None
+            };
+            let frames_ids = sub_matches.get_one::<String>("ids").map(|s| parse_ids(s)).unwrap_or_default();
+            let img_size = 800;
+            let with_tribe: bool = !sub_matches.get_flag("no_tribe");
+            let with_type: bool = !sub_matches.get_flag("no_type");
+            let anims_config = AnimationsConfig{img_size, with_tribe, with_type};
+            if let Some(c) = ContainerPSFB::from_file(&file_path) {
+                let img = {
+                    match composer_type.as_str() {
+                        "ul" => {
+                            let composer = ULCentreComposer{vertical: 5, horizontal: 5};
+                            draw_anim_frames(&anim_seq_vec, &c, &palette, &frames_ids, &composer, &anims_config)
+                        },
+                        _ => {
+                            let composer = URCentreComposer{vertical: 5, horizontal: 5};
+                            draw_anim_frames(&anim_seq_vec, &c, &palette, &frames_ids, &composer, &anims_config)
+                        },
+                    }
+                };
+                write_dyn_img_stdout(&img, DEFAULT_IMG_FORMAT);
             }
         }
         Some(("pls", sub_matches)) => {
