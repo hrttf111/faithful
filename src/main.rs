@@ -638,7 +638,8 @@ fn main() {
     };
 
     let mut landscape_mesh: LandscapeMeshS = {
-        let mut landscape_mesh = LandscapeMesh::new(1.0/16.0, 1.0/65536.0 * 16.0);
+        //note(): in original game landscape tile has proportions 256 * 256 * 1024
+        let mut landscape_mesh = LandscapeMesh::new(1.0/16.0, (1.0/16.0) * 4.0 / 1024.0);
         let lr = &level_res.borrow_mut();
         landscape_mesh.set_heights(&lr.landscape.height);
         landscape_mesh
