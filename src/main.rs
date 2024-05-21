@@ -225,6 +225,7 @@ struct LevelUniforms {
     level_shift: GlUniform1Cell<Vector4::<i32>>,
     height_scale: GlUniform1Cell<f32>,
     sunlight: GlUniform1Cell<Vector4::<f32>>,
+    wat_offset: GlUniform1Cell<i32>,
 }
 
 trait LandscapeProgram {
@@ -297,6 +298,7 @@ impl MainLandscapeProgram {
         program.set_uniform(7, uniforms.land_step.clone());
         program.set_uniform(8, uniforms.land_width.clone());
         program.set_uniform(21, uniforms.sunlight.clone());
+        program.set_uniform(23, uniforms.wat_offset.clone());
 
         let program_info = program.get_info().unwrap();
         log::debug!("Program info {}", program_info);
@@ -661,6 +663,7 @@ fn main() {
             let (x, y) = app_config.light.unwrap_or((0x93, 0x93));
             Vector4::<f32>::new(x as f32, y as f32, 0x93 as f32, 0.0)
         }),
+        wat_offset: GlUniform1::new_rc(-1),
     };
 
     let mut heights_buffer = {
@@ -669,6 +672,13 @@ fn main() {
         let vec = landscape.to_vec();
         heights_buffer.update(0, &vec).unwrap();
         heights_buffer
+    };
+
+    let _watdisp_buffer = {
+        let mut watdisp_buffer = GlShaderStorage::new(&gl, 4 * 256 * 256, 22).unwrap();
+        let vec = level_res.borrow_mut().params.watdisp.iter().map(|v| *v as u32).collect::<Vec<u32>>();
+        watdisp_buffer.update(0, &vec).unwrap();
+        watdisp_buffer
     };
 
     //
@@ -827,6 +837,13 @@ fn main() {
                         log::debug!("V = {:?}", v);
                         sunlight.set(v);
                         do_render = true;
+                    },
+                    KI { state: ElementState::Pressed, virtual_keycode: Some(VKC::Z), .. } => {
+                        do_render = true;
+                        let mut wat_offset = uniforms.wat_offset.borrow_mut();
+                        let mut v = *wat_offset.get();
+                        v += 1;
+                        wat_offset.set(v);
                     },
                     KI { state: ElementState::Pressed, virtual_keycode: Some(key), .. } => {
                         let mut pos: Vector3<f32> = Vector3{x: 0.0, y: 0.0, z: 0.0};

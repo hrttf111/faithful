@@ -15,6 +15,7 @@ pub struct LevelPaths {
     pub fade0: PathBuf,
     pub bl320: PathBuf,
     pub bl160: PathBuf,
+    pub watdisp: PathBuf,
 }
 
 fn mk_based_path(base: &Path, s: String) -> PathBuf {
@@ -34,6 +35,7 @@ impl LevelPaths {
             fade0: mk_based_path(base, format!("fade0-{key}.dat")),
             bl320: mk_based_path(base, format!("BL320-{key_upper}.DAT")),
             bl160: mk_based_path(base, format!("BL160-{key_upper}.DAT")),
+            watdisp: mk_based_path(base, "watdisp.dat".to_string()),
         }
     }
 
@@ -235,6 +237,7 @@ pub struct GlobeTextureParams {
     pub fade0: Vec<u8>,
     pub static_landscape_array: Vec<u16>,
     pub palette: Vec<u8>,
+    pub watdisp: Vec<u8>,
 }
 
 impl GlobeTextureParams {
@@ -246,6 +249,7 @@ impl GlobeTextureParams {
             fade0: read_bin(&paths.fade0),
             static_landscape_array: Self::make_static_array(),
             palette: read_bin(&paths.palette),
+            watdisp: read_bin(&paths.watdisp),
         }
     }
 
