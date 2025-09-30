@@ -17,9 +17,11 @@
         ] ++ p.buildInputs;
         APPEND_LIBRARY_PATH = with pkgs; lib.strings.makeLibraryPath [
           vulkan-loader
+          xorg.libX11
           xorg.libXcursor
           xorg.libXi
           xorg.libXrandr
+          libGL
         ];
         shellHook = ''
           echo ${pkgs.shaderc.bin}
