@@ -177,6 +177,41 @@ fn draw_anim_frames<L>(anim_seq: &Vec<AnimationSequence>
     draw_image(palette, image)
 }
 
+fn iter_anim_frames(anim_seq: &Vec<AnimationSequence>
+                   , psfb: &ContainerPSFB
+                   , frames_set: &FramesSet
+                   , config: &AnimationsConfig) {
+    let frames = {
+        let seq = AnimationSequence::get_frames(anim_seq);
+        if !frames_set.is_empty() {
+            seq.into_iter().filter(|f| frames_set.contains(&f.index)).collect::<Vec<AnimationFrame>>()
+        } else {
+            seq
+        }
+    };
+    for anim_frame in frames {
+        println!("AnimationFrame {:?} ({:?}, {:?})", anim_frame.index, anim_frame.width, anim_frame.height);
+        let elem_vecs = anim_frame.get_permutations(config.with_tribe, config.with_type);
+        for elem_vec in elem_vecs {
+            println!("  Composite");
+            for anim_sprite in elem_vec {
+                println!("    AnimationElement {:?} ({:?}, {:?}, tribe={:?}, flags=0x{:x}, uvar5=0x{:x}, original_flags=0x{:x})"
+                        , anim_sprite.sprite_index
+                        , anim_sprite.coord_x
+                        , anim_sprite.coord_y
+                        , anim_sprite.tribe
+                        , anim_sprite.flags
+                        , anim_sprite.uvar5
+                        , anim_sprite.original_flags);
+                if let Some(sprite) = psfb.get_info(anim_sprite.sprite_index) {
+                    let fit = (anim_frame.width >= sprite.width()) && (anim_frame.height >= sprite.height());
+                    println!("     Sprite({:?}, {:?}, fit={:?})", sprite.width(), sprite.height(), fit);
+                }
+            }
+        }
+    }
+}
+
 /*
  * land [args] <map_num>
  * globe [args] <map_num>
@@ -322,6 +357,38 @@ fn cli() -> Command {
                         .value_name("COMPOSER")
                         .value_parser(clap::builder::StringValueParser::new())
                         .help("Composer type"),
+                    Arg::new("ids")
+                        .long("ids")
+                        .action(ArgAction::Set)
+                        .value_name("IDS")
+                        .value_parser(clap::builder::StringValueParser::new())
+                        .help("Frames ids"),
+                    Arg::new("width")
+                        .long("width")
+                        .action(ArgAction::Set)
+                        .value_name("WIDTH")
+                        .value_parser(clap::value_parser!(u32).range(10..5000))
+                        .help("Image width in pixels"),
+                    Arg::new("no_tribe")
+                        .long("no_tribe")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not show tribe images"),
+                    Arg::new("no_type")
+                        .long("no_type")
+                        .action(ArgAction::SetTrue)
+                        .help("Do not show type images"),
+                ]).arg_required_else_help(true),
+        )
+        .subcommand(
+            Command::new("anims_iter")
+                .about("Iter animation sprites")
+                .args([
+                    Arg::new("path")
+                        .long("path")
+                        .action(ArgAction::Set)
+                        .value_name("FILE_PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Path to PSFB file"),
                     Arg::new("ids")
                         .long("ids")
                         .action(ArgAction::Set)
@@ -597,8 +664,7 @@ fn main() {
                                 , anim_sprite.original_flags);
                         if let Some(sprite) = psfb_container.as_ref().and_then(|p| p.get_info(anim_sprite.sprite_index)) {
                             let fit = (anim_frame.width >= sprite.width()) && (anim_frame.height >= sprite.height());
-                            let fit32 = (32 >= sprite.width()) && (32 >= sprite.height());
-                            println!("     Sprite({:?}, {:?}, fit={:?}, fit32={:?})", sprite.width(), sprite.height(), fit, fit32);
+                            println!("     Sprite({:?}, {:?}, fit={:?})", sprite.width(), sprite.height(), fit);
                         }
                     }
                 }
@@ -623,10 +689,10 @@ fn main() {
                 None
             };
             let frames_ids = sub_matches.get_one::<String>("ids").map(|s| parse_ids(s)).unwrap_or_default();
-            let img_size = 800;
+            let img_size: u32 = sub_matches.get_one::<u32>("width").copied().unwrap_or(800);
             let with_tribe: bool = !sub_matches.get_flag("no_tribe");
             let with_type: bool = !sub_matches.get_flag("no_type");
-            let anims_config = AnimationsConfig{img_size, with_tribe, with_type};
+            let anims_config = AnimationsConfig{img_size: img_size.try_into().unwrap(), with_tribe, with_type};
             if let Some(c) = ContainerPSFB::from_file(&file_path) {
                 let img = {
                     match composer_type.as_str() {
@@ -641,6 +707,18 @@ fn main() {
                     }
                 };
                 write_dyn_img_stdout(&img, DEFAULT_IMG_FORMAT);
+            }
+        }
+        Some(("anims_iter", sub_matches)) => {
+            let anims_data = AnimationsData::from_path(&base_path.join("data"));
+            let anim_seq_vec = AnimationSequence::from_data(&anims_data);
+            let file_path: PathBuf = sub_matches.get_one("path").cloned().unwrap();
+            let frames_ids = sub_matches.get_one::<String>("ids").map(|s| parse_ids(s)).unwrap_or_default();
+            let with_tribe: bool = !sub_matches.get_flag("no_tribe");
+            let with_type: bool = !sub_matches.get_flag("no_type");
+            let anims_config = AnimationsConfig{img_size: 0, with_tribe, with_type};
+            if let Some(c) = ContainerPSFB::from_file(&file_path) {
+                iter_anim_frames(&anim_seq_vec, &c, &frames_ids, &anims_config);
             }
         }
         Some(("pls", sub_matches)) => {

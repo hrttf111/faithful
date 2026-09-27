@@ -156,7 +156,7 @@ impl AnimationElement {
         while vele_index != 0 {
             let vele_sprite = &vele[vele_index];
             sprites.push(AnimationElement{
-                sprite_index: vele_sprite.sprite_index as usize / 6,
+                sprite_index: vele_sprite.sprite_index as usize / 6 - 1,
                 coord_x: vele_sprite.coord_x,
                 coord_y: vele_sprite.coord_y,
                 tribe: (vele_sprite.flags >> 9) as u8,
